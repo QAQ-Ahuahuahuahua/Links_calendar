@@ -1,0 +1,102 @@
+#verify username and password. If both are right, login; else return wrong msg
+
+sig validAuth : (String, String) ~> (hasR:Bool,msg:String)
+fun validAuth(name, pass) server{
+  var db = database "calendar";
+  var users = table "users" with (uid : Int, username: String, password: String, admin : Int) from db;
+
+  var user_pwd = query{
+    for(u <-- users)
+      where(u.username==name && u.password==pass)
+      [(uid=u.uid, username=u.username, admin= u.admin)]
+  };
+  if(user_pwd<>[]){
+    (hasR=true, msg="Login Welcome")
+  }
+  else{
+    var has_user = query{
+      for(u <-- users)
+        where(u.username==name)
+        [(uid=u.uid, username=u.username, admin= u.admin)]
+    };
+    if(has_user<>[]){
+      (hasR=false,msg="Wrong Password")
+    }
+    else{
+      (hasR=false,msg="Unregistered Username")
+    }
+  }
+}
+
+#start page
+
+fun mainPage (_) {
+  page
+  <#>{loginPage("")}</#>
+}
+
+#login page
+sig loginPage : (String) ~> (Xml)
+fun loginPage(msg){
+  <html>
+      <head>
+          <meta charset="utf-8" />
+          <title>Login</title>
+          <link rel="stylesheet" href="css/bootstrap.min.css" />
+          <link rel="stylesheet" href="css/style.css" />
+      </head>
+      <body>
+        <div class="container">
+          <div class="login">
+            <h2>Please Login</h2>
+            <form l:action="{login(username,password)}" method="post">
+              <div class="form-group has-error">
+                <label class="control-label" for="inputerror">{stringToXml(msg)}</label>
+              </div>
+              <div class="form-group col-md-offset-4 col-sm-4">
+                <input type="text" class="form-control" placeholder="Username" l:name="username" />
+              </div>
+              <div class="form-group col-md-offset-4 col-sm-4">
+                <input type="password" class="form-control" placeholder="Password" l:name="password" />
+              </div>
+              <div class="form-group col-md-offset-4 col-sm-4">
+                <button type="submit" class="btn btn-success btn-block">Login</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </body>
+  </html>
+}
+
+
+sig login : (String,String) ~> (Page)
+fun login(usr,pwd) {
+  if(validAuth(usr,pwd).hasR){
+    page
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <link rel="stylesheet" href="css/bootstrap.min.css" />
+        <title>Calendar</title>
+      </head>
+      <body>
+        <div class="container">
+          <h1>{stringToXml(validAuth(usr,pwd).msg)}</h1>
+        </div>
+      </body>
+    </html>
+  }
+  else{
+    page
+    <#>{loginPage(validAuth(usr,pwd).msg)}</#>
+  }
+}
+
+fun main () {
+  addRoute("",mainPage);
+  addStaticRoute("css", "css", []);
+  servePages()
+}
+
+main()

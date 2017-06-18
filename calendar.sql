@@ -1,0 +1,7 @@
+DROP DATABASE IF EXISTS calendar;
+
+CREATE DATABASE calendar;
+
+GRANT ALL ON DATABASE calendar TO zjh;
+
+
