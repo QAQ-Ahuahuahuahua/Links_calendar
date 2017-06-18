@@ -1,6 +1,6 @@
 #verify username and password. If both are right, login; else return wrong msg
 
-sig validAuth : (String, String) ~> (hasR:Bool,msg:String)
+sig validAuth : (String, String) ~> (hasR:Bool,msg:String, name : String, uid : Int)
 fun validAuth(name, pass) server{
   var db = database "calendar";
   var users = table "users" with (uid : Int, username: String, password: String, admin : Int) from db;
@@ -11,7 +11,7 @@ fun validAuth(name, pass) server{
       [(uid=u.uid, username=u.username, admin= u.admin)]
   };
   if(user_pwd<>[]){
-    (hasR=true, msg="Login Welcome")
+    (hasR=true, msg="Login Welcome",name=hd(user_pwd).username, uid=hd(user_pwd).uid)
   }
   else{
     var has_user = query{
@@ -20,10 +20,10 @@ fun validAuth(name, pass) server{
         [(uid=u.uid, username=u.username, admin= u.admin)]
     };
     if(has_user<>[]){
-      (hasR=false,msg="Wrong Password")
+      (hasR=false,msg="Wrong Password",name="", uid=0)
     }
     else{
-      (hasR=false,msg="Unregistered Username")
+      (hasR=false,msg="Unregistered Username", name="", uid=0)
     }
   }
 }
@@ -31,8 +31,13 @@ fun validAuth(name, pass) server{
 #start page
 
 fun mainPage (_) {
-  page
-  <#>{loginPage("")}</#>
+  var current_user = getCookie("loginname");
+  if (current_user <> "")     # User is logged in! Return creds.
+    login(current_user,"",true)
+  else{
+    page
+    <#>{loginPage("")}</#>
+  }
 }
 
 #login page
@@ -49,7 +54,7 @@ fun loginPage(msg){
         <div class="container">
           <div class="login">
             <h2>Please Login</h2>
-            <form l:action="{login(username,password)}" method="post">
+            <form l:action="{login(username,password,false)}" method="post">
               <div class="form-group has-error">
                 <label class="control-label" for="inputerror">{stringToXml(msg)}</label>
               </div>
@@ -69,28 +74,48 @@ fun loginPage(msg){
   </html>
 }
 
+sig calendarPage : (String)~>(Xml)
+fun calendarPage(user){
+  <html>
+    <head>
+      <meta charset="utf-8" />
+      <link rel="stylesheet" href="css/bootstrap.min.css" />
+      <title>Calendar</title>
+    </head>
+    <body>
+      <div class="container">
+        <h1>Welcome!</h1>
+        <h1>{stringToXml(user)}</h1>
+        <a l:href="{logout()}">Logout</a>
+      </div>
+    </body>
+  </html>
+}
 
-sig login : (String,String) ~> (Page)
-fun login(usr,pwd) {
-  if(validAuth(usr,pwd).hasR){
+sig login : (String,String,Bool) ~> (Page)
+fun login(usr,pwd,hasLogin) {
+  if(hasLogin){
     page
-    <html>
-      <head>
-        <meta charset="utf-8" />
-        <link rel="stylesheet" href="css/bootstrap.min.css" />
-        <title>Calendar</title>
-      </head>
-      <body>
-        <div class="container">
-          <h1>{stringToXml(validAuth(usr,pwd).msg)}</h1>
-        </div>
-      </body>
-    </html>
+    <#>{calendarPage(usr)}</#>
   }
   else{
-    page
-    <#>{loginPage(validAuth(usr,pwd).msg)}</#>
+    if(validAuth(usr,pwd).hasR){
+      setCookie("loginname", usr);
+      page
+      <#>{calendarPage(usr)}</#>
+    }
+    else{
+      page
+      <#>{loginPage(validAuth(usr,pwd).msg)}</#>
+    }
   }
+}
+
+sig logout : ()~>(Page)
+fun logout(){
+  setCookie("loginname", "");
+  page
+  <#>{loginPage("")}</#>
 }
 
 fun main () {
