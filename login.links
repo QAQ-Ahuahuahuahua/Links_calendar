@@ -1,14 +1,17 @@
+############################################
+#Logic and data
+############################################
+var db = database "calendar";
+var users = table "users" with (uid : Int, username: String, password: String, admin : Bool) from db;
+
 #verify username and password. If both are right, login; else return wrong msg
 
 sig validAuth : (String, String) ~> (hasR:Bool,msg:String, name : String, uid : Int)
 fun validAuth(name, pass) server{
-  var db = database "calendar";
-  var users = table "users" with (uid : Int, username: String, password: String, admin : Int) from db;
-
   var user_pwd = query{
     for(u <-- users)
       where(u.username==name && u.password==pass)
-      [(uid=u.uid, username=u.username, admin= u.admin)]
+      [(uid=u.uid, username=u.username)]
   };
   if(user_pwd<>[]){
     (hasR=true, msg="Login Welcome",name=hd(user_pwd).username, uid=hd(user_pwd).uid)
@@ -17,7 +20,7 @@ fun validAuth(name, pass) server{
     var has_user = query{
       for(u <-- users)
         where(u.username==name)
-        [(uid=u.uid, username=u.username, admin= u.admin)]
+        [(uid=u.uid, username=u.username)]
     };
     if(has_user<>[]){
       (hasR=false,msg="Wrong Password",name="", uid=0)
@@ -28,6 +31,46 @@ fun validAuth(name, pass) server{
   }
 }
 
+sig isAdmin: (String)~>(Bool)
+fun isAdmin(user) server{
+  var result = query{
+    for(u <-- users)
+      where(u.username==user)
+      [(uid=u.uid, admin=u.admin)]
+  };
+  if(hd(result).admin){
+    true
+  }
+  else{
+    false
+  }
+}
+
+sig login : (String,String,Bool) ~> (Page)
+fun login(usr,pwd,hasLogin) {
+  if(hasLogin){
+    calendarPage(usr)
+  }
+  else{
+    if(validAuth(usr,pwd).hasR){
+      setCookie("loginname", usr);
+      calendarPage(usr)
+    }
+    else{
+      loginPage(validAuth(usr,pwd).msg)
+    }
+  }
+}
+
+sig logout : ()~>(Page)
+fun logout(){
+  setCookie("loginname", "");
+  loginPage("")
+}
+
+############################################
+#Page
+############################################
 #start page
 
 fun mainPage (_) {
@@ -35,14 +78,14 @@ fun mainPage (_) {
   if (current_user <> "")     # User is logged in! Return creds.
     login(current_user,"",true)
   else{
-    page
-    <#>{loginPage("")}</#>
+    loginPage("")
   }
 }
 
 #login page
-sig loginPage : (String) ~> (Xml)
+sig loginPage : (String) ~> (Page)
 fun loginPage(msg){
+  page
   <html>
       <head>
           <meta charset="utf-8" />
@@ -74,8 +117,9 @@ fun loginPage(msg){
   </html>
 }
 
-sig calendarPage : (String)~>(Xml)
+sig calendarPage : (String)~>(Page)
 fun calendarPage(user){
+  page
   <html>
     <head>
       <meta charset="utf-8" />
@@ -83,43 +127,271 @@ fun calendarPage(user){
       <title>Calendar</title>
     </head>
     <body>
-      <div class="container">
-        <h1>Welcome!</h1>
-        <h1>{stringToXml(user)}</h1>
-        <a l:href="{logout()}">Logout</a>
+      <nav class="navbar navbar-default" role="navigation">
+        <div class="container-fluid">
+          <div class="narbar-header">
+            <a href="" class="navbar-brand">Calendar</a>
+          </div>
+          <div>
+            <ul class="nav navbar-nav navbar-left">
+              <li><a href="">Home</a></li>
+              <li><a href="" l:onclick="{eventPage()}">Add Event</a></li>
+              {
+                if(isAdmin(user)){
+                  <li><a href="" l:onclick="{adminPage()}">Admin</a></li>
+                }
+                else{
+                  <#></#>
+                }
+              }
+              <li><a href="">Day</a></li>
+            </ul>
+            <form class="navbar-form navbar-left" role="search" method="post">
+              <div class="form-group">
+                <input type="text" class="form-control" id="" placeholder="Search" />
+              </div>
+              <button type="submit" class="btn btn-default">Submit</button>
+            </form>
+            <ul class="nav navbar-nav navbar-right">
+              <li><a l:href="{logout()}">Logout</a></li>
+            </ul>
+            <p class="navbar-text navbar-right">Welcome! {stringToXml(user)}</p>
+          </div>
+        </div>
+      </nav>
+      <div id="content" class="container">
+        <div class="panel panel-default">
+          <div class="panel-heading">
+            <h3 class="panel-title">Calendar</h3>
+          </div>
+          <div class="panel-body">
+            <table class="table table-striped">
+              <thead>
+                <tr>
+                  <th>Sun</th>
+                  <th>Mon</th>
+                  <th>Tue</th>
+                  <th>Wed</th>
+                  <th>Thu</th>
+                  <th>Fri</th>
+                  <th>Sat</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="panel-footer">
+
+          </div>
+        </div>
       </div>
     </body>
   </html>
 }
 
-sig login : (String,String,Bool) ~> (Page)
-fun login(usr,pwd,hasLogin) {
-  if(hasLogin){
-    page
-    <#>{calendarPage(usr)}</#>
-  }
-  else{
-    if(validAuth(usr,pwd).hasR){
-      setCookie("loginname", usr);
-      page
-      <#>{calendarPage(usr)}</#>
-    }
-    else{
-      page
-      <#>{loginPage(validAuth(usr,pwd).msg)}</#>
-    }
-  }
+fun eventPage(){
+  replaceNode(
+  <div id="content" class="container">
+    <div class="panel panel-default">
+      <div class="panel-heading">
+        <h3 class="panel-title">Add Event</h3>
+      </div>
+      <div class="panel-body">
+        <form role="add_event" method="post" class="form-horizontal">
+          <div class="form-group">
+            <label for="Subject" class="col-sm-2 control-label">Subject</label>
+            <div class="col-sm-8">
+              <input type="text" class="form-control" id="" placeholder="Subject" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="Description" class="col-sm-2 control-label">Description</label>
+            <div class="col-sm-8">
+              <textarea rows="5" cols="8" class="form-control" placeholder="Please add your details"></textarea>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="Start time" class="col-sm-2 control-label">Start time</label>
+            <label for="Date" class="col-sm-1 control-label">Date</label>
+            <div class="col-sm-3">
+              <input type="text" class="form-control" id="" placeholder="2016-01-01" />
+            </div>
+            <label for="Date" class="col-sm-1 control-label">Time</label>
+            <div class="col-sm-3">
+              <input type="text" class="form-control" id="" placeholder="13:14" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="End time" class="col-sm-2 control-label">End time</label>
+            <label for="Date" class="col-sm-1 control-label">Date</label>
+            <div class="col-sm-3">
+              <input type="text" class="form-control" id="" placeholder="2016-01-01" />
+            </div>
+            <label for="Date" class="col-sm-1 control-label">Time</label>
+            <div class="col-sm-3">
+              <input type="text" class="form-control" id="" placeholder="13:14" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="Time_type" class="col-sm-1 control-label col-sm-offset-2">Type</label>
+            <div class="col-sm-3">
+              <select class="form-control">
+                <option value="normal">Normal</option>
+                <option value="full">Full day</option>
+              </select>
+            </div>
+            <label for="Date" class="col-sm-1 control-label">Repeat</label>
+            <div class="col-sm-3">
+              <select class="form-control">
+                <option value="never">Never</option>
+                <option value="weekly">Weekly</option>
+                <option value="everyday">Everyday</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <div class="col-sm-offset-2">
+              <div class="checkbox">
+                <label><input type="checkbox" />Read_only</label>
+              </div>
+            </div>
+          </div>
+          <div class="col-sm-offset-4 col-sm-4">
+            <button type="submit" class="btn btn-default btn-block">Submit</button>
+          </div>
+        </form>
+      </div>
+      <div class="panel-footer">
+
+      </div>
+    </div>
+  </div>,
+  getNodeById("content"))
 }
 
-sig logout : ()~>(Page)
-fun logout(){
-  setCookie("loginname", "");
-  page
-  <#>{loginPage("")}</#>
+fun adminPage(){
+  replaceNode(
+  <div class="container" id="content">
+    <div class="panel panel-default">
+      <div class="panel-heading">
+        <ol class="breadcrumb">
+          <li><a href="" l:onclick="{adminPage()}" >Users</a></li>
+          <li><a href="" l:onclick="{adminPage_Group()}">Groups</a></li>
+        </ol>
+      </div>
+      <div class="panel-body" id="ad_sub">
+        <table class="table table-hover">
+          <caption class="center">User Management</caption>
+          <thead>
+            <tr>
+              <th>Uid</th>
+              <th>Username</th>
+              <th>Group Info</th>
+              <th>Permissions</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+
+          </tbody>
+        </table>
+        <div class="row" id="new_user">
+          <div class="col-sm-offset-4 col-sm-4">
+            <button type="button" class="btn btn-default btn-block" l:onclick="{newUserDiv()}">Create User</button>
+          </div>
+        </div>
+      </div>
+      <div class="panel-footer">
+
+      </div>
+    </div>
+  </div>,
+  getNodeById("content"))
+}
+
+fun adminPage_Group(){
+  replaceNode(
+  <div class="panel-body" id="ad_sub">
+    <table class="table table-hover">
+      <caption class="center">Group Management</caption>
+      <thead>
+        <tr>
+          <th>Gid</th>
+          <th>Group</th>
+          <th>Action</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+
+      </tbody>
+    </table>
+    <div class="row" id="new_group">
+      <div class="col-sm-offset-4 col-sm-4">
+        <button type="button" class="btn btn-default btn-block" l:onclick="{newGroupDiv()}">Create Group</button>
+      </div>
+    </div>
+  </div>,
+  getNodeById("ad_sub"))
+}
+
+fun newUserDiv(){
+  replaceNode(
+  <div id="new_user">
+    <form class="form-horizontal" role="addUser" method="post">
+      <div class="form-group">
+        <label for="Username" class="col-sm-4 control-label">Username</label>
+        <div class="col-sm-4">
+          <input type="text" class="form-control" id="" placeholder="username" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="Password" class="col-sm-4 control-label">Password</label>
+        <div class="col-sm-4">
+          <input type="password" class="form-control" id="" placeholder="Password" />
+        </div>
+      </div>
+      <div class="form-group">
+        <div class="col-sm-offset-4">
+          <div class="checkbox">
+            <label><input type="checkbox" />Admin</label>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-offset-4 col-sm-4">
+        <button type="submit" class="btn btn-default btn-block">Submit</button>
+      </div>
+    </form>
+  </div>,
+  getNodeById("new_user"))
+}
+
+fun newGroupDiv(){
+  replaceNode(
+  <div id="new_group">
+    <form class="form-horizontal" role="addGroup" method="post">
+      <div class="form-group">
+        <label for="GroupName" class="col-sm-4 control-label">Group Name</label>
+        <div class="col-sm-4">
+          <input type="text" class="form-control" id="" placeholder="Group name" />
+        </div>
+      </div>
+      <div class="col-sm-offset-4 col-sm-4">
+        <button type="submit" class="btn btn-default btn-block">Submit</button>
+      </div>
+    </form>
+  </div>,
+  getNodeById("new_group"))
 }
 
 fun main () {
   addRoute("",mainPage);
+  #addRoute("",loginPage);
+  #addRoute("calendar",calendarPage);
   addStaticRoute("css", "css", []);
   servePages()
 }
