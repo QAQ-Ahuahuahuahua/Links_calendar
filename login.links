@@ -3,6 +3,8 @@
 ############################################
 var db = database "calendar";
 var users = table "users" with (uid : Int, username: String, password: String, admin : Bool) from db;
+var groups = table "groups" with (gid : Int, group_name : String) where gid readonly from db;
+var user_group = table "user_group" with (gid : Int, uid : Int) from db;
 
 #verify username and password. If both are right, login; else return wrong msg
 
@@ -43,6 +45,19 @@ fun isAdmin(user) server{
   }
   else{
     false
+  }
+}
+
+#sig addGroup: (String)~>(Page)
+fun addGroup(group_name) server {
+  insert groups values [(group_name=group_name)];
+  adminPage_Group()
+}
+
+fun showGroups() server{
+  query{
+    for(g<--groups)
+      [(gid=g.gid, name=g.group_name)]
   }
 }
 
@@ -327,7 +342,15 @@ fun adminPage_Group(){
         </tr>
       </thead>
       <tbody>
-
+        {
+          for(group<-showGroups())
+            <tr>
+              <td>{intToXml(group.gid)}</td>
+              <td>{stringToXml(group.name)}</td>
+              <td><a href="">Edit</a></td>
+              <td><a href="">Delete</a></td>
+            </tr>
+        }
       </tbody>
     </table>
     <div class="row" id="new_group">
