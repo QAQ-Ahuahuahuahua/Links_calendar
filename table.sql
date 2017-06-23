@@ -13,5 +13,27 @@ CREATE TABLE users (
   UNIQUE(username)
 );
 
+/*
+create groups
+*/
+DROP TABLE IF EXISTS groups;
+CREATE TABLE groups (
+  gid serial NOT NULL,
+  group_name varchar(32) NOT NULL,
+  PRIMARY KEY (gid),
+  UNIQUE(group_name)
+);
+
+/*
+user_group
+*/
+DROP TABLE IF EXISTS user_group;
+CREATE TABLE user_group(
+  gid int NOT NULL,
+  uid int NOT NULL
+);
+
 INSERT INTO users VALUES (1, 'zjh','123',true,1,null);
 INSERT INTO users VALUES (2, 'doris','123',false,1,null);
+
+INSERT INTO groups VALUES(1,'friends');
