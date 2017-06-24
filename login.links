@@ -88,7 +88,7 @@ fun updateGroup(gid, group_name){
   adminPage_Group()
 }
 
-sig deleteGroup : (Int)~>()
+#sig deleteGroup : (Int)~>()
 fun deleteGroup(gid){
   deleteGroup_S(gid);
   adminPage_Group()
