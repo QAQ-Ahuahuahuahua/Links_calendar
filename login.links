@@ -2,7 +2,7 @@
 #Logic and data
 ############################################
 var db = database "calendar";
-var users = table "users" with (uid : Int, username: String, password: String, admin : Bool) from db;
+var users = table "users" with (uid : Int, username: String, password: String, admin : Int) where uid readonly from db;
 var groups = table "groups" with (gid : Int, group_name : String) where gid readonly from db;
 var user_group = table "user_group" with (gid : Int, uid : Int) from db;
 
@@ -43,7 +43,7 @@ fun isAdmin(user) server{
       where(u.username==user)
       [(uid=u.uid, admin=u.admin)]
   };
-  if(hd(result).admin){
+  if(hd(result).admin==1){
     true
   }
   else{
@@ -51,26 +51,15 @@ fun isAdmin(user) server{
   }
 }
 
-sig login : (String,String,Bool) ~> (Page)
-fun login(usr,pwd,hasLogin) {
-  if(hasLogin){
-    calendarPage(usr)
-  }
-  else{
-    if(validAuth(usr,pwd).hasR){
-      setCookie("loginname", usr);
-      calendarPage(usr)
-    }
-    else{
-      loginPage(validAuth(usr,pwd).msg)
-    }
-  }
-}
+
 
 sig logout : ()~>(Page)
 fun logout(){
   setCookie("loginname", "");
-  loginPage("")
+  freshResource();
+  #loginPage("")
+  #calendarPage("")
+  login("")
 }
 
 #########################################
@@ -102,20 +91,53 @@ fun showGroups() server{
 }
 
 fun addGroup_S (group_name) server {
-  insert groups values [(group_name=group_name)];
-  ()
+  insert groups values [(group_name=group_name)]
 }
 
 fun updateGroup_S (gid,group_name) server {
-  update (g<--groups) where (g.gid==gid) set (group_name=group_name);
-  ()
+  update (g<--groups) where (g.gid==gid) set (group_name=group_name)
 }
 
 fun deleteGroup_S (gid) server{
-  delete (g<--groups) where (g.gid==gid);
-  ()
+  delete (g<--groups) where (g.gid==gid)
 }
 
+#########################################
+#Admin Group Page
+#########################################
+fun showUsers() server{
+  query{
+    for(u<--users)
+      [(uid=u.uid, username=u.username)]
+  }
+}
+
+#sig deleteUser : (Int)~>()
+fun deleteUser(uid){
+  deleteUser_S(uid);
+  adminPage()
+}
+
+fun deleteUser_S (uid) server{
+  delete (u<--users) where (u.uid==uid)
+}
+
+sig addUser: (String,String,Int)~>()
+fun addUser(username,password,admin) {
+  if(admin==1){
+    addUser_S(username,password,admin);
+    adminPage()
+  }
+  else{
+    addUser_S(username,password,0);
+    adminPage()
+  }
+
+}
+
+fun addUser_S (username,password,admin) server {
+  insert users values [(username=username,password=password,admin=admin)]
+}
 
 ############################################
 #Page
@@ -123,17 +145,31 @@ fun deleteGroup_S (gid) server{
 #start page
 
 fun mainPage (_) {
+  login("")
+}
+
+sig login : (String)~>(Page)
+fun login(info){
   var current_user = getCookie("loginname");
   if (current_user <> "")     # User is logged in! Return creds.
-    login(current_user,"",true)
+    #login(current_user,"",true)
+    calendarPage(current_user)
   else{
-    loginPage("")
+    var (username=usr, password=pwd) = sendSuspend(fun(r){loginPage(info,r)});
+    if(validAuth(usr,pwd).hasR){
+      setCookie("loginname", usr);
+      calendarPage(usr)
+    }
+    else{
+      login(validAuth(usr,pwd).msg)
+    }
   }
 }
 
+
 #login page
-sig loginPage : (String) ~> (Page)
-fun loginPage(msg){
+sig loginPage : (String,Handler((username:String,password:String))) ~> (Page)
+fun loginPage(msg,return){
   page
   <html>
       <head>
@@ -146,7 +182,7 @@ fun loginPage(msg){
         <div class="container">
           <div class="login">
             <h2>Please Login</h2>
-            <form l:action="{login(username,password,false)}" method="post">
+            <form l:action="{return((username=username,password=password))}" method="post">
               <div class="form-group has-error">
                 <label class="control-label" for="inputerror">{stringToXml(msg)}</label>
               </div>
@@ -227,9 +263,7 @@ fun calendarPage(user){
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td></td>
-                </tr>
+
               </tbody>
             </table>
           </div>
@@ -250,11 +284,11 @@ fun eventPage(){
         <h3 class="panel-title">Add Event</h3>
       </div>
       <div class="panel-body">
-        <form role="add_event" method="post" class="form-horizontal">
+        <form role="add_event" method="post" class="form-horizontal" l:onsubmit="{}">
           <div class="form-group">
             <label for="Subject" class="col-sm-2 control-label">Subject</label>
             <div class="col-sm-8">
-              <input type="text" class="form-control" id="" placeholder="Subject" />
+              <input type="text" class="form-control" placeholder="Subject" l:name="subject"/>
             </div>
           </div>
           <div class="form-group">
@@ -345,7 +379,16 @@ fun adminPage(){
             </tr>
           </thead>
           <tbody>
-
+            {
+              for(user<-showUsers())
+                <tr>
+                  <td>{intToXml(user.uid)}</td>
+                  <td>{stringToXml(user.username)}</td>
+                  <td><a href="" l:onclick="{}">View</a></td>
+                  <td><a href="" l:onclick="{}">Edit</a></td>
+                  <td><a href="" l:onclick="{deleteUser(user.uid)}">Delete</a></td>
+                </tr>
+            }
           </tbody>
         </table>
         <div class="row" id="new_user">
@@ -389,7 +432,7 @@ fun adminPage_Group(){
     </table>
     <div class="row" id="new_group">
       <div class="col-sm-offset-4 col-sm-4">
-        <button type="button" class="btn btn-default btn-block" l:onclick="{newGroupDiv("")}">Create Group</button>
+        <button type="button" class="btn btn-default btn-block" l:onclick="{newGroupDiv()}">Create Group</button>
       </div>
     </div>
   </div>,
@@ -419,23 +462,23 @@ fun editGroup(gid,name){
 fun newUserDiv(){
   replaceNode(
   <div id="new_user">
-    <form class="form-horizontal" role="addUser" method="post">
+    <form class="form-horizontal" role="addGroup" method="post" l:onsubmit="{addUser(username,password,stringToInt(admin))}">
       <div class="form-group">
         <label for="Username" class="col-sm-4 control-label">Username</label>
         <div class="col-sm-4">
-          <input type="text" class="form-control" id="" placeholder="username" />
+          <input type="text" class="form-control" placeholder="Username" l:name="username" />
         </div>
       </div>
       <div class="form-group">
         <label for="Password" class="col-sm-4 control-label">Password</label>
         <div class="col-sm-4">
-          <input type="password" class="form-control" id="" placeholder="Password" />
+          <input type="password" class="form-control" placeholder="Password" l:name="password" />
         </div>
       </div>
       <div class="form-group">
         <div class="col-sm-offset-4">
           <div class="checkbox">
-            <label><input type="checkbox" />Admin</label>
+            <label><input type="checkbox" l:name="admin" />Admin</label>
           </div>
         </div>
       </div>
@@ -447,14 +490,14 @@ fun newUserDiv(){
   getNodeById("new_user"))
 }
 
-fun newGroupDiv(name){
+fun newGroupDiv(){
   replaceNode(
   <div id="new_group">
     <form class="form-horizontal" role="addGroup" method="post" l:onsubmit="{addGroup(group_name)}">
       <div class="form-group">
         <label for="GroupName" class="col-sm-4 control-label">Group Name</label>
         <div class="col-sm-4">
-          <input type="text" class="form-control" placeholder="Group name" value="{name}" l:name="group_name" />
+          <input type="text" class="form-control" placeholder="Group name" l:name="group_name" />
         </div>
       </div>
       <div class="col-sm-offset-4 col-sm-4">
