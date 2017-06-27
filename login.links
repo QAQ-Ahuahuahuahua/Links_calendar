@@ -43,7 +43,7 @@ fun isAdmin(user) server{
       where(u.username==user)
       [(uid=u.uid, admin=u.admin)]
   };
-  if(hd(result).admin==1){
+  if(hd(result).admin==1 && result<>[]){
     true
   }
   else{
@@ -51,14 +51,20 @@ fun isAdmin(user) server{
   }
 }
 
-
+sig getUsernameById : (Int)~>(String)
+fun getUsernameById(uid) server{
+  var user = query{
+    for(u<--users)
+    where(u.uid==uid)
+    [(name=u.username)]
+  };
+  hd(user).name
+}
 
 sig logout : ()~>(Page)
 fun logout(){
   setCookie("loginname", "");
   freshResource();
-  #loginPage("")
-  #calendarPage("")
   login("")
 }
 
@@ -71,18 +77,19 @@ fun addGroup(group_name) {
   adminPage_Group()
 }
 
-#sig updateGroup : (Int,String)~>()
+sig updateGroup : (Int,String)~>()
 fun updateGroup(gid, group_name){
   updateGroup_S(gid,group_name);
   adminPage_Group()
 }
 
-#sig deleteGroup : (Int)~>()
+sig deleteGroup : (Int)~>()
 fun deleteGroup(gid){
   deleteGroup_S(gid);
   adminPage_Group()
 }
 
+sig showGroups : ()~>[(gid : Int, name : String)]
 fun showGroups() server{
   query{
     for(g<--groups)
@@ -90,21 +97,26 @@ fun showGroups() server{
   }
 }
 
+sig addGroup_S : (String)~>()
 fun addGroup_S (group_name) server {
   insert groups values [(group_name=group_name)]
 }
 
+sig updateGroup_S : (Int, String) ~>()
 fun updateGroup_S (gid,group_name) server {
   update (g<--groups) where (g.gid==gid) set (group_name=group_name)
 }
 
+sig deleteGroup_S : (Int)~>()
 fun deleteGroup_S (gid) server{
-  delete (g<--groups) where (g.gid==gid)
+  delete (g<--groups) where (g.gid==gid);
+  delete (ug<--user_group) where (ug.gid==gid)
 }
 
 #########################################
 #Admin Group Page
 #########################################
+sig showUsers : ()~>[(uid : Int, username : String)]
 fun showUsers() server{
   query{
     for(u<--users)
@@ -114,29 +126,86 @@ fun showUsers() server{
 
 #sig deleteUser : (Int)~>()
 fun deleteUser(uid){
+  var current_u = getCookie("loginname");
+  var user = getUsernameById(uid);
   deleteUser_S(uid);
-  adminPage()
+  if(current_u<>user)
+    adminPage()
+  else
+    setCookie("loginname", "");
+    replaceDocument(
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <link rel="stylesheet" href="css/bootstrap.min.css" />
+        <title>Fool</title>
+      </head>
+      <body>
+        <h1>Opps~!</h1>
+        <h2>You have deleted yourself</h2>
+      </body>
+    </html>)
 }
 
+sig deleteUser_S : (Int)~>()
 fun deleteUser_S (uid) server{
-  delete (u<--users) where (u.uid==uid)
+  delete (u<--users) where (u.uid==uid);
+  delete (ug<--user_group) where (ug.uid==uid)
 }
 
 sig addUser: (String,String,Int)~>()
 fun addUser(username,password,admin) {
-  if(admin==1){
-    addUser_S(username,password,admin);
-    adminPage()
-  }
-  else{
-    addUser_S(username,password,0);
-    adminPage()
-  }
-
+  addUser_S(username,password,admin);
+  adminPage()
 }
 
+sig addUser_S : (String,String,Int)~>()
 fun addUser_S (username,password,admin) server {
   insert users values [(username=username,password=password,admin=admin)]
+}
+
+############################################
+# User and Group Page
+############################################
+sig showGroupsById : (Int)~>([(gid : Int, name : String)])
+fun showGroupsById(uid) server{
+  query{
+    for(g<--groups)
+    for(ug<--user_group)
+    where(ug.uid==uid && ug.gid==g.gid)
+    [(gid=g.gid, name=g.group_name)]
+  }
+}
+
+sig showRestGroups : (Int)~>([(gid : Int, name : String)])
+fun showRestGroups(uid) server {
+  query{
+    for(g<--groups)
+    where(empty(for(ug<--user_group) where (ug.uid==uid && g.gid==ug.gid) [()]))
+    [(gid=g.gid, name=g.group_name)]
+  }
+}
+
+sig addUserGroup : (Int, Int)~>()
+fun addUserGroup(uid,gid){
+  addUserGroup_S(uid,gid);
+  arrangeGroup(uid,getUsernameById(uid))
+}
+
+sig addUserGroup_S : (Int, Int)~>()
+fun addUserGroup_S(uid,gid) server {
+  insert user_group values [(uid=uid,gid=gid)]
+}
+
+sig deleteUserGroup : (Int,Int)~>()
+fun deleteUserGroup(uid,gid){
+  deleteUserGroup_S(uid,gid);
+  arrangeGroup(uid,getUsernameById(uid))
+}
+
+sig deleteUserGroup_S : (Int, Int)~>()
+fun deleteUserGroup_S(uid,gid) server {
+  delete (ug<--user_group) where (ug.uid==uid && ug.gid==gid)
 }
 
 ############################################
@@ -276,6 +345,7 @@ fun calendarPage(user){
   </html>
 }
 
+sig eventPage : ()~>()
 fun eventPage(){
   replaceNode(
   <div id="content" class="container">
@@ -356,6 +426,7 @@ fun eventPage(){
   getNodeById("content"))
 }
 
+sig adminPage : ()~>()
 fun adminPage(){
   replaceNode(
   <div class="container" id="content">
@@ -380,11 +451,12 @@ fun adminPage(){
           </thead>
           <tbody>
             {
+              var current_u = getCookie("loginname");
               for(user<-showUsers())
                 <tr>
                   <td>{intToXml(user.uid)}</td>
                   <td>{stringToXml(user.username)}</td>
-                  <td><a href="" l:onclick="{}">View</a></td>
+                  <td><a href="" l:onclick="{arrangeGroup(user.uid, user.username)}">View</a></td>
                   <td><a href="" l:onclick="{}">Edit</a></td>
                   <td><a href="" l:onclick="{deleteUser(user.uid)}">Delete</a></td>
                 </tr>
@@ -405,6 +477,71 @@ fun adminPage(){
   getNodeById("content"))
 }
 
+sig arrangeGroup : (Int,String)~>()
+fun arrangeGroup(uid,username){
+  replaceNode(
+  <div class="panel-body" id="ad_sub">
+    <div class="row">
+      <div class="col-sm-6">
+        <div class="panel panel-info">
+          <div class="panel-heading">
+            <h3 class="panel-title">Arrange new group to {stringToXml(username)}</h3>
+          </div>
+          <div class="panel-body">
+            <form  method="post" l:onsubmit="{addUserGroup(uid,stringToInt(gid))}">
+              <div class="form-group">
+                <label for="Group">Group Name</label>
+                <select class="form-control" l:name="gid">
+                  {
+                    for(g<-showRestGroups(uid))
+                      <option value="{intToString(g.gid)}">{stringToXml(g.name)}</option>
+                  }
+
+                </select>
+              </div>
+              <div class="pull-right">
+                <button type="submit" class="btn btn-info">Submit</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      <div class="col-sm-6">
+        <div class="panel panel-success">
+          <div class="panel-heading">
+            <h3 class="panel-title">The groups {stringToXml(username)} has</h3>
+          </div>
+          <div class="list-group">
+            {
+              var groups = showGroupsById(uid);
+              if(groups<>[]){
+                for(g<-groups)
+                  <a href="" class="list-group-item">
+                    <div class="row">
+                      <div class="col-sm-8">
+                        <h4>{stringToXml(g.name)}</h4>
+                      </div>
+                      <div class="col-sm-4 pull-right">
+                        <a href="" l:onclick="{deleteUserGroup(uid,g.gid)}"><h4>Delete</h4></a>
+                      </div>
+                    </div>
+                  </a>
+              }
+              else{
+                <a class="list-group-item">
+                  <h4>None</h4>
+                </a>
+              }
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  ,getNodeById("ad_sub"))
+}
+
+sig adminPage_Group : ()~>()
 fun adminPage_Group(){
   replaceNode(
   <div class="panel-body" id="ad_sub">
@@ -444,7 +581,7 @@ fun editGroup(gid,name){
   var gid_s = intToString(gid);
   replaceNode(
   <td id="{gid_s}">
-    <form class="" method="post" l:onsubmit="{updateGroup(gid,new_name)}">
+    <form method="post" l:onsubmit="{updateGroup(gid,new_name)}">
       <div class="input-group col-sm-6">
         <input type="text" value="{name}" class="form-control" l:name="new_name" />
         <span class="input-group-btn">
@@ -459,6 +596,7 @@ fun editGroup(gid,name){
   ,getNodeById(gid_s))
 }
 
+sig newUserDiv : ()~>()
 fun newUserDiv(){
   replaceNode(
   <div id="new_user">
@@ -476,9 +614,18 @@ fun newUserDiv(){
         </div>
       </div>
       <div class="form-group">
+        <label for="Admin" class="col-sm-4 control-label">Admin</label>
+        <div class="col-sm-4">
+          <select class="form-control" l:name="admin">
+            <option value="1">Yes</option>
+            <option value="0">No</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
         <div class="col-sm-offset-4">
           <div class="checkbox">
-            <label><input type="checkbox" l:name="admin" />Admin</label>
+            <label><input type="checkbox" />Admin</label>
           </div>
         </div>
       </div>
