@@ -86,26 +86,28 @@ fun logout(){
 #########################################
 #Admin Group Page
 #########################################
-sig addGroup: (String,String)~>()
-fun addGroup(group_name,username) {
+sig addGroup: (String)~>()
+fun addGroup(group_name) {
+  var username = getCookie("loginname");
   addGroup_S(group_name,username);
-  groupPage(username)
+  groupPage()
 }
 
-sig updateGroup : (Int,String,String)~>()
-fun updateGroup(gid, group_name,username){
+sig updateGroup : (Int,String)~>()
+fun updateGroup(gid, group_name){
   updateGroup_S(gid,group_name);
-  groupPage(username)
+  groupPage()
 }
 
-sig deleteGroup : (Int,String)~>()
-fun deleteGroup(gid,username){
+sig deleteGroup : (Int)~>()
+fun deleteGroup(gid){
   deleteGroup_S(gid);
-  groupPage(username)
+  groupPage()
 }
 
-sig showGroupsByUser : (String)~>[(gid : Int, name : String)]
-fun showGroupsByUser(user) server{
+sig showGroupsByUser : ()~>[(gid : Int, name : String)]
+fun showGroupsByUser() server{
+  var user = getCookie("loginname");
   if(isAdmin(user)){
     query{
       for(g<--groups)
@@ -121,6 +123,19 @@ fun showGroupsByUser(user) server{
       [(gid=g.gid, name=g.group_name)]
     }
   }
+}
+
+sig getGroupById : (Int)~>((gid : Int, name : String, creater : Int))
+fun getGroupById (gid) server{
+  var group = query{
+    for(g<--groups)
+    where (g.gid==gid)
+    [(gid=g.gid, name=g.group_name, creater= g.creater)]
+  };
+  if(group<>[])
+    hd(group)
+  else
+    (gid=0, name="", creater=0)
 }
 
 sig addGroup_S : (String,String)~>()
@@ -149,11 +164,11 @@ fun deleteGroup_S (gid) server{
 #########################################
 #Admin Group Page
 #########################################
-sig showUsers : ()~>[(uid : Int, username : String)]
+sig showUsers : ()~>[(uid : Int, username : String, admin : Int)]
 fun showUsers() server{
   query{
     for(u<--users)
-      [(uid=u.uid, username=u.username)]
+      [(uid=u.uid, username=u.username, admin=u.admin)]
   }
 }
 
@@ -197,16 +212,37 @@ fun addUser_S (username,password,admin) server {
   insert users values [(username=username,password=password,admin=admin)]
 }
 
+sig updateAdmin : (Int,Int)~>()
+fun updateAdmin (uid,admin){
+  updateAdmin_S(uid,admin);
+  adminPage()
+}
+
+sig updateAdmin_S : (Int,Int)~>()
+fun updateAdmin_S (uid,admin) server{
+  update (u<--users) where (u.uid==uid) set (admin=admin)
+}
+
 ############################################
 # User and Group Page
 ############################################
-sig showGroupsById : (Int)~>([(gid : Int, name : String, read : Int, write:Int,modify:Int,admin:Int)])
-fun showGroupsById(uid) server{
+sig showGroupsByUid : (Int)~>([(gid : Int, name : String, read : Int, write:Int,modify:Int,admin:Int)])
+fun showGroupsByUid(uid) server{
   query{
     for(g<--groups)
     for(ug<--user_group)
     where(ug.uid==uid && ug.gid==g.gid)
     [(gid=g.gid, name=g.group_name,read=ug.read,write=ug.write,modify=ug.modify,admin=ug.admin)]
+  }
+}
+
+sig showUsersByGid : (Int)~>([(uid : Int, name : String, read : Int, write:Int,modify:Int,admin:Int)])
+fun showUsersByGid(gid) server{
+  query{
+    for(u<--users)
+    for(ug<--user_group)
+    where(ug.uid==u.uid && ug.gid==gid)
+    [(uid=u.uid, name=u.username,read=ug.read,write=ug.write,modify=ug.modify,admin=ug.admin)]
   }
 }
 
@@ -219,10 +255,22 @@ fun showRestGroups(uid) server {
   }
 }
 
-sig addUserGroup : (Int, Int,Int,Int,Int,Int)~>()
-fun addUserGroup(uid,gid,read,write,modify,admin){
+sig showRestUsers : (Int)~>([(uid : Int, name : String)])
+fun showRestUsers (gid) server {
+  query{
+    for(u<--users)
+    where(empty(for(ug<--user_group) where (ug.uid==u.uid && gid==ug.gid) [()]))
+    [(uid=u.uid, name=u.username)]
+  }
+}
+
+#sig addUserGroup : (Int, Int,Int,Int,Int,Int,String,String)~>()
+fun addUserGroup(uid,gid,read,write,modify,admin,msg){
   addUserGroup_S(uid,gid,read,write,modify,admin);
-  arrangeGroup(uid,getUserById(uid).username)
+  switch(msg){
+    case "group" -> arrangeGroup(uid,getUserById(uid).username)
+    case "user" -> arrangeUser(gid,getGroupById(gid).name)
+  }
 }
 
 sig addUserGroup_S : (Int, Int,Int, Int,Int,Int)~>()
@@ -241,10 +289,13 @@ fun updateUserP_S (uid,gid,read,write,modify,admin) server {
   update (ug<--user_group) where (ug.uid==uid && ug.gid==gid) set (read=read,write=write,modify=modify,admin=admin)
 }
 
-sig deleteUserGroup : (Int,Int)~>()
-fun deleteUserGroup(uid,gid){
+sig deleteUserGroup : (Int,Int,String)~>()
+fun deleteUserGroup(uid,gid,msg){
   deleteUserGroup_S(uid,gid);
-  arrangeGroup(uid,getUserById(uid).username)
+  switch(msg){
+    case "group" -> arrangeGroup(uid,getUserById(uid).username)
+    case "user" -> arrangeUser(gid,getGroupById(gid).name)
+  }
 }
 
 sig deleteUserGroup_S : (Int, Int)~>()
@@ -342,7 +393,7 @@ fun calendarPage(user){
                   <#></#>
                 }
               }
-              <li><a href="" l:onclick="{groupPage(user)}">Group Admin</a></li>
+              <li><a href="" l:onclick="{groupPage()}">Group Admin</a></li>
               <li><a href="">Day</a></li>
             </ul>
             <form class="navbar-form navbar-left" role="search" method="post">
@@ -390,8 +441,8 @@ fun calendarPage(user){
   </html>
 }
 
-sig groupPage : (String)~>()
-fun groupPage(user){
+sig groupPage : ()~>()
+fun groupPage(){
   replaceNode(
   <div class="container" id="content">
     <div class="panel panel-default">
@@ -404,25 +455,27 @@ fun groupPage(user){
             <tr>
               <th>Gid</th>
               <th>Group</th>
-              <th>Action</th>
+              <th></th>
+              <th>Group Info</th>
               <th>Action</th>
             </tr>
           </thead>
           <tbody>
             {
-              for(group<-showGroupsByUser(user))
+              for(group<-showGroupsByUser())
                 <tr>
                   <td>{intToXml(group.gid)}</td>
                   <td id="{intToString(group.gid)}">{stringToXml(group.name)}</td>
-                  <td><a href="" l:onclick="{editGroup(group.gid,group.name,user)}">Edit</a></td>
-                  <td><a href="" l:onclick="{deleteGroup(group.gid,user)}">Delete</a></td>
+                  <td><a href="" l:onclick="{editGroup(group.gid,group.name)}">Edit</a></td>
+                  <td><a href="" l:onclick="{arrangeUser(group.gid,group.name)}">View</a></td>
+                  <td><a href="" l:onclick="{deleteGroup(group.gid)}">Delete</a></td>
                 </tr>
             }
           </tbody>
         </table>
         <div class="row" id="new_group">
           <div class="col-sm-offset-4 col-sm-4">
-            <button type="button" class="btn btn-default btn-block" l:onclick="{newGroupDiv(user)}">Create Group</button>
+            <button type="button" class="btn btn-default btn-block" l:onclick="{newGroupDiv()}">Create Group</button>
           </div>
         </div>
       </div>
@@ -530,7 +583,8 @@ fun adminPage(){
               <th>Uid</th>
               <th>Username</th>
               <th>Group Info</th>
-              <th>Permissions</th>
+              <th>Admin</th>
+              <th></th>
               <th>Action</th>
             </tr>
           </thead>
@@ -541,7 +595,8 @@ fun adminPage(){
                   <td>{intToXml(user.uid)}</td>
                   <td>{stringToXml(user.username)}</td>
                   <td><a href="" l:onclick="{arrangeGroup(user.uid, user.username)}">View</a></td>
-                  <td><a href="" l:onclick="{}">Edit</a></td>
+                  <td id= "{intToString(user.uid)}">{intToXml(user.admin)}</td>
+                  <td><a href="" l:onclick="{editAdmin(user.uid)}">Edit</a></td>
                   <td><a href="" l:onclick="{deleteUser(user.uid)}">Delete</a></td>
                 </tr>
             }
@@ -559,6 +614,29 @@ fun adminPage(){
     </div>
   </div>,
   getNodeById("content"))
+}
+
+sig editAdmin : (Int)~>()
+fun editAdmin(uid){
+  var uid_s = intToString(uid);
+  replaceNode(
+  <td id="{uid_s}">
+    <form method="post" l:onsubmit="{updateAdmin(uid,stringToInt(admin))}">
+      <div class="input-group">
+        <select class="form-control" l:name="admin">
+          <option value="1">Yes</option>
+          <option value="0">No</option>
+        </select>
+        <span class="input-group-btn">
+          <button class="btn btn-default" type="submit">Submit</button>
+        </span>
+        <span class="input-group-btn">
+          <button class="btn btn-default" type="button" l:onclick="{adminPage()}">Cancel</button>
+        </span>
+      </div>
+    </form>
+  </td>
+  ,getNodeById(uid_s))
 }
 
 sig arrangeGroup : (Int,String)~>()
@@ -581,7 +659,7 @@ fun arrangeGroup(uid,username){
       </thead>
       <tbody>
       {
-        var groups = showGroupsById(uid);
+        var groups = showGroupsByUid(uid);
         if(groups<>[]){
           for(g<-groups)
           <tr id="{intToString(g.gid)}">
@@ -592,7 +670,7 @@ fun arrangeGroup(uid,username){
             <td>{intToXml(g.modify)}</td>
             <td>{intToXml(g.admin)}</td>
             <td><a href="" l:onclick="{editUserGroup(uid,username,g.gid,g.name)}">Edit</a></td>
-            <td><a href="" l:onclick="{deleteUserGroup(uid,g.gid)}">Delete</a></td>
+            <td><a href="" l:onclick="{deleteUserGroup(uid,g.gid,"group")}">Delete</a></td>
           </tr>
         }
         else
@@ -604,7 +682,7 @@ fun arrangeGroup(uid,username){
     <div class="row">
       <div class="col-sm-offset-4 col-sm-4" id="changeBox">
         <h4 class="center">Arrange new group to {stringToXml(username)}</h4>
-        <form  method="post" l:onsubmit="{addUserGroup(uid,stringToInt(gid),stringToInt(read),stringToInt(write),stringToInt(modify),stringToInt(admin))}">
+        <form  method="post" l:onsubmit="{addUserGroup(uid,stringToInt(gid),stringToInt(read),stringToInt(write),stringToInt(modify),stringToInt(admin),"group")}">
           <div class="form-group">
             <label for="Group">Group Name</label>
             <select class="form-control" l:name="gid">
@@ -651,6 +729,98 @@ fun arrangeGroup(uid,username){
     </div>
   </div>
   ,getNodeById("ad_sub"))
+}
+
+sig arrangeUser : (Int,String)~>()
+fun arrangeUser(gid,name){
+  replaceNode(
+  <div class="panel-body" id="group_ad">
+    <table class="table table-hover">
+      <caption class="center">The user permission in group {stringToXml(name)}</caption>
+      <thead>
+        <tr>
+          <th>Uid</th>
+          <th>Name</th>
+          <th>Read</th>
+          <th>Write</th>
+          <th>Modify</th>
+          <th>Group Admin</th>
+          <th>Action</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+      {
+        var users = showUsersByGid(gid);
+        if(users<>[]){
+          for(u<-users)
+          <tr id="{intToString(u.uid)}">
+            <td>{intToXml(u.uid)}</td>
+            <td>{stringToXml(u.name)}</td>
+            <td>{intToXml(u.read)}</td>
+            <td>{intToXml(u.write)}</td>
+            <td>{intToXml(u.modify)}</td>
+            <td>{intToXml(u.admin)}</td>
+            <td><a href="" l:onclick="{}">Edit</a></td>
+            <td><a href="" l:onclick="{deleteUserGroup(u.uid,gid,"user")}">Delete</a></td>
+          </tr>
+        }
+        else
+          <#></#>
+      }
+      </tbody>
+    </table>
+    <div class="row"></div>
+    <div class="row">
+      <div class="col-sm-offset-4 col-sm-4" id="changeBox">
+        <h4 class="center">Arrange new user to {stringToXml(name)}</h4>
+        <form  method="post" l:onsubmit="{addUserGroup(stringToInt(uid),gid,stringToInt(read),stringToInt(write),stringToInt(modify),stringToInt(admin),"user")}">
+          <div class="form-group">
+            <label for="User">Username</label>
+            <select class="form-control" l:name="uid">
+              {
+                for(u<-showRestUsers(gid))
+                  <option value="{intToString(u.uid)}">{stringToXml(u.name)}</option>
+              }
+
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="Group">Read</label>
+            <select class="form-control" l:name="read">
+              <option value="1">Yes</option>
+              <option value="0">No</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="Group">Write</label>
+            <select class="form-control" l:name="write">
+              <option value="1">Yes</option>
+              <option value="0">No</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="Group">Modify</label>
+            <select class="form-control" l:name="modify">
+              <option value="1">Yes</option>
+              <option value="0">No</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="Group">Admin</label>
+            <select class="form-control" l:name="admin">
+              <option value="1">Yes</option>
+              <option value="0">No</option>
+            </select>
+          </div>
+          <div class="pull-right">
+            <button type="submit" class="btn btn-info">Submit</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  ,getNodeById("group_ad"))
 }
 
 sig editUserGroup : (Int,String,Int,String)~>()
@@ -700,19 +870,19 @@ fun editUserGroup(uid,username,gid,gname){
   ,getNodeById("changeBox"))
 }
 
-sig editGroup : (Int,String,String)~>()
-fun editGroup(gid,name,user){
+sig editGroup : (Int,String)~>()
+fun editGroup(gid,name){
   var gid_s = intToString(gid);
   replaceNode(
   <td id="{gid_s}">
-    <form method="post" l:onsubmit="{updateGroup(gid,new_name,user)}">
+    <form method="post" l:onsubmit="{updateGroup(gid,new_name)}">
       <div class="input-group col-sm-6">
         <input type="text" value="{name}" class="form-control" l:name="new_name" />
         <span class="input-group-btn">
           <button class="btn btn-default" type="submit">Done</button>
         </span>
         <span class="input-group-btn">
-          <button class="btn btn-default" type="button" l:onclick="{groupPage(user)}">Cancel</button>
+          <button class="btn btn-default" type="button" l:onclick="{groupPage()}">Cancel</button>
         </span>
       </div>
     </form>
@@ -761,11 +931,11 @@ fun newUserDiv(){
   getNodeById("new_user"))
 }
 
-sig newGroupDiv : (String)~>()
-fun newGroupDiv(user){
+sig newGroupDiv : ()~>()
+fun newGroupDiv(){
   replaceNode(
   <div id="new_group">
-    <form class="form-horizontal" role="addGroup" method="post" l:onsubmit="{addGroup(group_name,user)}">
+    <form class="form-horizontal" role="addGroup" method="post" l:onsubmit="{addGroup(group_name)}">
       <div class="form-group">
         <label for="GroupName" class="col-sm-4 control-label">Group Name</label>
         <div class="col-sm-4">
