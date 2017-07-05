@@ -35,7 +35,23 @@ CREATE TABLE user_group(
   write smallint DEFAULT '0',
   read smallint DEFAULT '1',
   modify smallint DEFAULT '0',
-  admin smallint DEFAULT '0'
+  admin smallint DEFAULT '0',
+  UNIQUE (gid,uid)
+);
+
+DROP TABLE IF EXISTS events;
+CREATE TABLE events(
+  eid serial NOT NULL,
+  subject varchar(32) NOT NULL,
+  description varchar(255) NOT NULL,
+  start_date date NOT NULL,
+  start_time time NOT NULL,
+  end_date date NOT NULL,
+  end_time time NOT NULL,
+  creater int NOT NULL,
+  group_event smallint DEFAULT '0',
+  gid int NOT NULL DEFAULT '0',
+  PRIMARY KEY (eid)
 );
 
 

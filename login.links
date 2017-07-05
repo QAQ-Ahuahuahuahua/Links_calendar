@@ -8,7 +8,8 @@ var users = table "users" with (uid : Int, username: String, password: String, a
 var groups = table "groups" with (gid : Int, group_name : String, creater : Int) where gid readonly from db;
 var user_group = table "user_group" with (gid : Int, uid : Int, write : Int, read : Int, modify : Int, admin : Int)
                   where write default, modify default,read default,admin default from db;
-
+var events = table "events" with (eid : Int, subject : String, description : String, start_date : String, start_time : String, end_date : String, end_time : String, creater : Int, group_event : Int, gid : Int)
+                  where eid readonly, group_event default from db;
 #############################################
 #Login Part
 #############################################
@@ -304,6 +305,31 @@ fun deleteUserGroup_S(uid,gid) server {
 }
 
 ############################################
+#Add Event Page
+############################################
+sig hasWriteRight : ()~>(Bool)
+fun hasWriteRight(){
+  var user = getCookie("loginname");
+  var t = showEventGroup();
+  if(t<>[]||isAdmin(user))
+    true
+  else
+    false
+}
+
+sig showEventGroup : ()~>[(gid : Int, name : String)]
+fun showEventGroup() server{
+  var user = getCookie("loginname");
+  var uid = getUserByUsername(user).uid;
+  query{
+    for(g<--groups)
+    for(ug<--user_group)
+    where(ug.uid==uid && (ug.write==1 || ug.admin==1) && ug.gid==g.gid)
+    [(gid=g.gid, name=g.group_name)]
+  }
+}
+
+############################################
 #Page
 ############################################
 #start page
@@ -329,7 +355,6 @@ fun login(info){
     }
   }
 }
-
 
 #login page
 sig loginPage : (String,Handler((username:String,password:String))) ~> (Page)
@@ -394,7 +419,7 @@ fun calendarPage(user){
                 }
               }
               <li><a href="" l:onclick="{groupPage()}">Group Admin</a></li>
-              <li><a href="">Day</a></li>
+              <li><a href="" l:onclick="{dayPage()}">Day</a></li>
             </ul>
             <form class="navbar-form navbar-left" role="search" method="post">
               <div class="form-group">
@@ -439,6 +464,34 @@ fun calendarPage(user){
       </div>
     </body>
   </html>
+}
+
+sig dayPage :()~>()
+fun dayPage(){
+  replaceNode(
+  <div class="container" id="content">
+    <div class="list-group">
+      <a href="#" class="list-group-item">
+        <div class="btn-group col-sm-offset-5">
+          <button type="button" class="btn-primary btn">Prev</button>
+          <button type="button" class="btn-primary btn">Today</button>
+          <button type="button" class="btn-primary btn">Next</button>
+        </div>
+      </a>
+      <a href="#" class="list-group-item">
+        <div class="row">
+          <div class="col-sm-8">
+            <h4 class="list-group-item-heading">24*7 支持</h4>
+          </div>
+          <div class="col-sm-4">
+            <a href=""><h4 class="pull-right">More</h4></a>
+          </div>
+        </div>
+        <p class="list-group-item-text">我们提供 24*7 支持。</p>
+      </a>
+    </div>
+  </div>
+  ,getNodeById("content"))
 }
 
 sig groupPage : ()~>()
@@ -500,61 +553,55 @@ fun eventPage(){
           <div class="form-group">
             <label for="Subject" class="col-sm-2 control-label">Subject</label>
             <div class="col-sm-8">
-              <input type="text" class="form-control" placeholder="Subject" l:name="subject"/>
+              <input type="text" class="form-control" l:name="subject" placeholder="Subject" />
             </div>
           </div>
           <div class="form-group">
             <label for="Description" class="col-sm-2 control-label">Description</label>
             <div class="col-sm-8">
-              <textarea rows="5" cols="8" class="form-control" placeholder="Please add your details"></textarea>
+              <textarea rows="5" cols="8" l:name="description" class="form-control" placeholder="Please add your details"></textarea>
             </div>
           </div>
           <div class="form-group">
             <label for="Start time" class="col-sm-2 control-label">Start time</label>
             <label for="Date" class="col-sm-1 control-label">Date</label>
             <div class="col-sm-3">
-              <input type="text" class="form-control" id="" placeholder="2016-01-01" />
+              <input type="text" class="form-control" l:name="startdate" placeholder="2016-01-01" />
             </div>
             <label for="Date" class="col-sm-1 control-label">Time</label>
             <div class="col-sm-3">
-              <input type="text" class="form-control" id="" placeholder="13:14" />
+              <input type="text" class="form-control" l:name="starttime" placeholder="13:14" />
             </div>
           </div>
           <div class="form-group">
             <label for="End time" class="col-sm-2 control-label">End time</label>
             <label for="Date" class="col-sm-1 control-label">Date</label>
             <div class="col-sm-3">
-              <input type="text" class="form-control" id="" placeholder="2016-01-01" />
+              <input type="text" class="form-control" l:name="enddate" placeholder="2016-01-01" />
             </div>
             <label for="Date" class="col-sm-1 control-label">Time</label>
             <div class="col-sm-3">
-              <input type="text" class="form-control" id="" placeholder="13:14" />
+              <input type="text" class="form-control" l:name="endtime" placeholder="13:14" />
             </div>
           </div>
-          <div class="form-group">
-            <label for="Time_type" class="col-sm-1 control-label col-sm-offset-2">Type</label>
-            <div class="col-sm-3">
-              <select class="form-control">
-                <option value="normal">Normal</option>
-                <option value="full">Full day</option>
-              </select>
-            </div>
-            <label for="Date" class="col-sm-1 control-label">Repeat</label>
-            <div class="col-sm-3">
-              <select class="form-control">
-                <option value="never">Never</option>
-                <option value="weekly">Weekly</option>
-                <option value="everyday">Everyday</option>
-              </select>
-            </div>
-          </div>
-          <div class="form-group">
-            <div class="col-sm-offset-2">
-              <div class="checkbox">
-                <label><input type="checkbox" />Read_only</label>
+          {
+            if(hasWriteRight()){
+              <div class="form-group">
+                <label for="Groupname" class="col-sm-2 control-label ">Group Name</label>
+                <div class="col-sm-3 col-sm-offset-1">
+                  <select class="form-control"  >
+                    {
+                      for(g<-showEventGroup())
+                      <option value="{intToString(g.gid)}">{stringToXml(g.name)}</option>
+                    }
+                  </select>
+                </div>
               </div>
-            </div>
-          </div>
+            }
+            else{
+              <input type="hidden"  value="" />
+            }
+          }
           <div class="col-sm-offset-4 col-sm-4">
             <button type="submit" class="btn btn-default btn-block">Submit</button>
           </div>
