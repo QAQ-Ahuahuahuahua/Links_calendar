@@ -8,8 +8,10 @@ var users = table "users" with (uid : Int, username: String, password: String, a
 var groups = table "groups" with (gid : Int, group_name : String, creater : Int) where gid readonly from db;
 var user_group = table "user_group" with (gid : Int, uid : Int, write : Int, read : Int, modify : Int, admin : Int)
                   where write default, modify default,read default,admin default from db;
-var events = table "events" with (eid : Int, subject : String, description : String, start_date : String, start_time : String, end_date : String, end_time : String, creater : Int, group_event : Int, gid : Int)
+var events = table "events" with (eid : Int, subject : String, description : String, creater : Int, group_event : Int, gid : Int)
                   where eid readonly, group_event default from db;
+var occurrences = table "occurrences" with (oid : Int, eid :Int, start_date : String, start_time : String, end_date : String, end_time : String)
+                  where oid readonly from db;
 #############################################
 #Login Part
 #############################################
@@ -227,6 +229,21 @@ fun updateAdmin_S (uid,admin) server{
 ############################################
 # User and Group Page
 ############################################
+sig getRightByGid : (Int)~>(uid : Int,gid : Int, read : Int, write:Int,modify:Int,admin:Int)
+fun getRightByGid (gid) server {
+  var user = getCookie("loginname");
+  var uid = getUserByUsername(user).uid;
+  var r = query{
+    for(ug<--user_group)
+    where(ug.uid==uid && ug.gid==gid)
+    [(uid=ug.uid,gid=ug.gid,read=ug.read,write=ug.write,admin=ug.admin,modify=ug.modify)]
+  };
+  if(r<>[])
+    hd(r)
+  else
+    (uid=0,gid=0,read=0,write=0,admin=0,modify=0)
+}
+
 sig showGroupsByUid : (Int)~>([(gid : Int, name : String, read : Int, write:Int,modify:Int,admin:Int)])
 fun showGroupsByUid(uid) server{
   query{
@@ -279,10 +296,13 @@ fun addUserGroup_S(uid,gid,read,write,modify,admin) server {
   insert user_group values [(uid=uid,gid=gid,read=read,write=write,modify=modify,admin=admin)]
 }
 
-sig updateUserP : (Int, Int,Int,Int,Int,Int)~>()
-fun updateUserP(uid,gid,read,write,modify,admin){
+sig updateUserP : (Int, Int,Int,Int,Int,Int,String)~>()
+fun updateUserP(uid,gid,read,write,modify,admin,msg){
   updateUserP_S(uid,gid,read,write,modify,admin);
-  arrangeGroup(uid,getUserById(uid).username)
+  switch(msg){
+    case "group" -> arrangeGroup(uid,getUserById(uid).username)
+    case "user" -> arrangeUser(gid,getGroupById(gid).name)
+  }
 }
 
 sig updateUserP_S : (Int, Int,Int,Int,Int,Int)~>()
@@ -329,6 +349,130 @@ fun showEventGroup() server{
   }
 }
 
+fun getEidByName(subject, gid) server {
+  var t = query{
+    for(e<--events)
+    where(e.subject==subject && e.gid ==gid)
+    [(eid = e.eid)]
+  };
+  if(t<>[])
+    hd(t)
+  else
+    (eid=0)
+}
+
+sig addEvent : (String,String,String,String,String,String,String)~>()
+fun addEvent(subject,description,startdate,starttime,enddate,endtime,gid) {
+  var user = getCookie("loginname");
+  var uid = getUserByUsername(user).uid;
+  addEvent_S(subject,description,startdate,starttime,enddate,endtime,gid,uid);
+  dayPage()
+}
+
+sig addEvent_S : (String,String,String,String,String,String,String,Int)~>()
+fun addEvent_S(subject,description,startdate,starttime,enddate,endtime,gid,uid) server{
+  if(gid<>""){
+    var gid_s = stringToInt(gid);
+    insert events values [(subject=subject,description=description,creater=uid,group_event=1,gid=gid_s)];
+    var eid = getEidByName(subject,gid_s).eid;
+    insert occurrences values [(eid=eid, start_date=startdate,start_time=starttime,end_date=enddate,end_time=endtime )]
+  }
+  else{
+    insert events values [(subject=subject,description=description, creater=uid,group_event=0,gid=0)];
+    var eid = getEidByName(subject,0).eid;
+    insert occurrences values [(eid=eid, start_date=startdate,start_time=starttime,end_date=enddate,end_time=endtime )]
+  }
+}
+
+sig showDayEvents : (String)~>[(eid :Int,subject:String,description:String)]
+fun showDayEvents(date) server{
+  var user = getCookie("loginname");
+  var uid = getUserByUsername(user).uid;
+  var person = query{
+    for(o<--occurrences)
+    for(e<--events)
+    where(e.eid ==o.eid && o.start_date<=date &&  o.end_date>=date && e.creater==uid && e.group_event==0)
+    [(eid=e.eid,subject=e.subject,description=e.description)]
+  };
+  var group = query{
+    for(o<--occurrences)
+    for(e<--events)
+    where(e.eid ==o.eid && o.start_date<=date &&  o.end_date>=date && not(empty(for(ug<--user_group) where(ug.uid==uid && ug.gid==e.gid && (ug.read==1 || ug.admin==1 || ug.modify==1)) [()])) )
+    [(eid=e.eid,subject=e.subject,description=e.description)]
+  };
+  person ++ group
+}
+
+fun getEventById(eid) server {
+  var e = query{
+    for(e<--events)
+    where(e.eid==eid)
+    [(eid=e.eid, subject=e.subject,description=e.description,creater=e.creater,gid=e.gid,group_event=e.group_event )]
+  };
+  if(e<>[])
+    hd(e)
+  else
+    (eid=0,subject="",description="",creater=0,gid=0,group_event=0)
+
+}
+
+fun getOccurByEid(eid) server {
+  query{
+    for(o<--occurrences)
+    where(o.eid==eid)
+    [(oid=o.oid,start_d = o.start_date,start_t=o.start_time,end_d=o.end_date,end_t=o.end_time)]
+  }
+}
+
+fun deleteEvent(eid){
+  deleteEvent_S(eid);
+  dayPage()
+}
+
+fun deleteEvent_S(eid) server{
+  delete (e<--events) where (e.eid==eid);
+  delete (o<--occurrences) where (o.eid==eid)
+}
+
+fun deleteOccur(oid,eid){
+  deleteOccur_S(oid);
+  eachEvent(eid)
+}
+
+fun deleteOccur_S(oid) server {
+  delete (o<--occurrences) where (o.oid==oid)
+}
+
+sig addOccur : (Int,String,String,String,String)~>()
+fun addOccur(eid,start_d,start_t,end_d,end_t){
+  addOccur_S(eid,start_d,start_t,end_d,end_t);
+  eachEvent(eid)
+}
+
+sig addOccur_S : (Int,String,String,String,String)~>()
+fun addOccur_S (eid, start_d,start_t,end_d,end_t) server{
+  insert occurrences values [(eid=eid, start_time=start_t, start_date=start_d, end_date=end_d, end_time=end_t)]
+}
+
+sig updateOccur : (Int,Int,String,String,String,String)~>()
+fun updateOccur (oid,eid,start_d,start_t,end_d,end_t){
+  updateOccur_S(oid,eid,start_d,start_t,end_d,end_t);
+  eachEvent(eid)
+}
+
+fun updateOccur_S (oid,eid,start_d,start_t,end_d,end_t) server {
+  update (o<--occurrences) where (o.oid==oid && o.eid==eid) set (start_date=start_d,start_time=start_t,end_date=end_d,end_time=end_t)
+}
+
+sig updateEvent : (Int,String)~>()
+fun updateEvent (eid,desc){
+  updateEvent_S (eid,desc);
+  eachEvent(eid)
+}
+
+fun updateEvent_S (eid,desc){
+  update (e<--events) where (e.eid==eid) set (description=desc)
+}
 ############################################
 #Page
 ############################################
@@ -471,27 +615,230 @@ fun dayPage(){
   replaceNode(
   <div class="container" id="content">
     <div class="list-group">
-      <a href="#" class="list-group-item">
+      <a href="" class="list-group-item">
         <div class="btn-group col-sm-offset-5">
           <button type="button" class="btn-primary btn">Prev</button>
           <button type="button" class="btn-primary btn">Today</button>
           <button type="button" class="btn-primary btn">Next</button>
         </div>
       </a>
-      <a href="#" class="list-group-item">
-        <div class="row">
-          <div class="col-sm-8">
-            <h4 class="list-group-item-heading">24*7 支持</h4>
+      {
+        for(e<-showDayEvents("2017-07-05"))
+        <a href="" class="list-group-item">
+          <div class="row">
+            <div class="col-sm-8">
+              <h4 class="list-group-item-heading">{stringToXml(e.subject)}</h4>
+            </div>
+            <div class="col-sm-4">
+              <a href="" l:onclick="{eachEvent(e.eid)}"><h4 class="pull-right">More</h4></a>
+            </div>
           </div>
-          <div class="col-sm-4">
-            <a href=""><h4 class="pull-right">More</h4></a>
-          </div>
-        </div>
-        <p class="list-group-item-text">我们提供 24*7 支持。</p>
-      </a>
+          <p class="list-group-item-text">{stringToXml(e.description)}</p>
+        </a>
+      }
     </div>
   </div>
   ,getNodeById("content"))
+}
+
+sig eachEvent : (Int)~>()
+fun eachEvent(eid){
+  var e = getEventById(eid);
+  var occur = getOccurByEid(eid);
+  var r = {if(e.group_event<>0)
+              getRightByGid(e.gid)
+            else
+              (uid=0,gid=0,read=0,write=0,admin=0,modify=0)
+            };
+  replaceNode(
+  <div class="container" id="content">
+    <div class="row">
+      <div class="col-sm-2">
+        <h4>Suject</h4>
+      </div>
+      <div class="col-sm-10">
+        <strong>{stringToXml(e.subject)}</strong>
+      </div>
+    </div>
+    <div class="row" id="desc">
+      <div class="col-sm-2">
+        <h4>Description</h4>
+      </div>
+      <div class="col-sm-10">
+        <p>{stringToXml(e.description)}</p>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-sm-2">
+        <h4>Group Name</h4>
+      </div>
+      <div class="col-sm-10">
+        {
+          if(e.gid<>0)
+            <p>{stringToXml(getGroupById(e.gid).name)}</p>
+          else
+            <p>None(Personal Business)</p>
+        }
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-sm-2">
+        <h4>Created By</h4>
+      </div>
+      <div class="col-sm-10">
+        <p>{stringToXml(getUserById(e.creater).username)}</p>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-sm-2">
+        <h4>Occurrences</h4>
+      </div>
+    </div>
+    {
+      for(o<-occur)
+      <div class="row" id="{intToString(o.oid)}">
+        <div class="col-sm-2">
+          <strong>Start</strong>
+        </div>
+        <div class="col-sm-2">
+          <p>{stringToXml(o.start_d)} {stringToXml(o.start_t)}</p>
+        </div>
+        <div class="col-sm-2">
+          <strong>End</strong>
+        </div>
+        <div class="col-sm-2">
+          <p>{stringToXml(o.end_d)} {stringToXml(o.end_t)}</p>
+        </div>
+        <div class="col-sm-2">
+          {
+            if((r.gid<>0 && (r.modify ==1 || r.admin==1))||e.gid==0)
+              <a href="" l:onclick="{editOccur(o.oid,eid,o.start_d,o.start_t,o.end_d,o.end_t)}"><strong>Edit</strong></a>
+            else
+              <#></#>
+          }
+        </div>
+        <div class="col-sm-2">
+          {
+            if((r.gid<>0 && r.admin==1)||e.gid==0)
+              <a href="" l:onclick="{deleteOccur(o.oid,eid)}"><strong>Delete</strong></a>
+            else
+              <#></#>
+          }
+        </div>
+      </div>
+    }
+    <div id="new_occur"></div>
+    <br />
+    <br />
+    <div class="btn-group">
+      {
+        if(r.gid==0){
+          <#>
+          <button type="button" class="btn btn-default" l:onclick="{editEvent(eid,e.description)}">Modify</button>
+          <button type="button" class="btn btn-default" l:onclick="{deleteEvent(eid)}">Delete</button>
+          <button type="button" class="btn btn-default" l:onclick="{newOccur(eid)}">Add Occurrences</button>
+          </#>
+        }
+        else
+          <#></#>
+      }
+      {
+        if(r.gid<>0 && (r.modify ==1 || r.admin==1))
+          <button type="button" class="btn btn-default" l:onclick="{editEvent(eid,e.description)}">Modify</button>
+        else
+          <#></#>
+      }
+      {
+        if(r.gid<>0 && r.admin==1)
+          <button type="button" class="btn btn-default" l:onclick="{deleteEvent(eid)}">Delete</button>
+        else
+          <#></#>
+      }
+      {
+        if(r.gid<>0 && (r.write ==1 || r.admin==1))
+          <button type="button" class="btn btn-default" l:onclick="{newOccur(eid)}">Add Occurrences</button>
+        else
+          <#></#>
+      }
+    </div>
+  </div>
+  ,getNodeById("content"))
+}
+
+fun editEvent(eid,description){
+  replaceNode(
+  <form  method="post" l:onsubmit="{updateEvent(eid,desc)}">
+    <div class="form-group">
+      <div class="col-sm-2">
+        <h4>Description</h4>
+      </div>
+      <div class="col-sm-10">
+        <textarea class="form-control" rows="5" cols="10" value="{description}" l:name="desc"></textarea>
+      </div>
+    </div>
+    <div class="pull-right btn-group">
+      <button type="submit">Submit</button>
+      <button type="button" l:onclick="{eachEvent(eid)}">Cancle</button>
+    </div>
+  </form>
+  ,getNodeById("desc"))
+}
+
+sig newOccur : (Int)~>()
+fun newOccur(eid){
+  replaceNode(
+  <form method="post" class="form-inline" l:onsubmit="{addOccur(eid,start_d,start_t,end_d,end_t)}">
+    <div class="form-group">
+      <label for="Start">Start Time</label>
+      <input type="text" class="form-control" placeholder="2017-01-01" l:name="start_d" />
+    </div>
+    <div class="form-group">
+      <label for="Time" class="sr-only"></label>
+      <input type="text" class="form-control" placeholder="17:00" l:name="start_t"/>
+    </div>
+    <div class="form-group">
+      <label for="End">End Time</label>
+      <input type="text" class="form-control" placeholder="2017-01-01" l:name="end_d"/>
+    </div>
+    <div class="form-group">
+      <label for="Time" class="sr-only"></label>
+      <input type="text" class="form-control" placeholder="17:00" l:name="end_t"/>
+    </div>
+    <div class="btn-group">
+      <button type="submit" class="btn btn-success" >Submit</button>
+      <button type="button" class="btn btn-warning" l:onclick="{eachEvent(eid)}" >Cancle</button>
+    </div>
+  </form>
+  ,getNodeById("new_occur"))
+}
+
+sig editOccur : (Int,Int,String,String,String,String)~>()
+fun editOccur(oid,eid,s_date,s_time,e_date,e_time){
+  var oid_s = intToString(oid);
+  replaceNode(
+  <form method="post" class="form-inline" l:onsubmit="{updateOccur(oid,eid,start_d,start_t,end_d,end_t)}">
+    <div class="form-group">
+      <label for="Start">Start Time</label>
+      <input type="text" class="form-control" value="{s_date}" l:name="start_d" />
+    </div>
+    <div class="form-group">
+      <label for="Time" class="sr-only"></label>
+      <input type="text" class="form-control" value="{s_time}" l:name="start_t"/>
+    </div>
+    <div class="form-group">
+      <label for="End">End Time</label>
+      <input type="text" class="form-control" value="{e_date}" l:name="end_d"/>
+    </div>
+    <div class="form-group">
+      <label for="Time" class="sr-only"></label>
+      <input type="text" class="form-control" value="{e_time}" l:name="end_t"/>
+    </div>
+    <div class="btn-group">
+      <button type="submit" class="btn btn-success" >Submit</button>
+      <button type="button" class="btn btn-warning" l:onclick="{eachEvent(eid)}" >Cancle</button>
+    </div>
+  </form>
+  ,getNodeById(oid_s))
 }
 
 sig groupPage : ()~>()
@@ -549,7 +896,7 @@ fun eventPage(){
         <h3 class="panel-title">Add Event</h3>
       </div>
       <div class="panel-body">
-        <form role="add_event" method="post" class="form-horizontal" l:onsubmit="{}">
+        <form role="add_event" method="post" class="form-horizontal" l:onsubmit="{addEvent(subject,description,startdate,starttime,enddate,endtime,gid)}">
           <div class="form-group">
             <label for="Subject" class="col-sm-2 control-label">Subject</label>
             <div class="col-sm-8">
@@ -584,24 +931,18 @@ fun eventPage(){
               <input type="text" class="form-control" l:name="endtime" placeholder="13:14" />
             </div>
           </div>
-          {
-            if(hasWriteRight()){
-              <div class="form-group">
-                <label for="Groupname" class="col-sm-2 control-label ">Group Name</label>
-                <div class="col-sm-3 col-sm-offset-1">
-                  <select class="form-control"  >
-                    {
-                      for(g<-showEventGroup())
-                      <option value="{intToString(g.gid)}">{stringToXml(g.name)}</option>
-                    }
-                  </select>
-                </div>
-              </div>
-            }
-            else{
-              <input type="hidden"  value="" />
-            }
-          }
+          <div class="form-group">
+            <label for="Groupname" class="col-sm-2 control-label ">Group Name</label>
+            <div class="col-sm-3 col-sm-offset-1">
+              <select class="form-control" l:name="gid" >
+                <option value="">None</option>
+                {
+                  for(g<-showEventGroup())
+                  <option value="{intToString(g.gid)}">{stringToXml(g.name)}</option>
+                }
+              </select>
+            </div>
+          </div>
           <div class="col-sm-offset-4 col-sm-4">
             <button type="submit" class="btn btn-default btn-block">Submit</button>
           </div>
@@ -716,7 +1057,7 @@ fun arrangeGroup(uid,username){
             <td>{intToXml(g.write)}</td>
             <td>{intToXml(g.modify)}</td>
             <td>{intToXml(g.admin)}</td>
-            <td><a href="" l:onclick="{editUserGroup(uid,username,g.gid,g.name)}">Edit</a></td>
+            <td><a href="" l:onclick="{editUserGroup(uid,username,g.gid,g.name,"group")}">Edit</a></td>
             <td><a href="" l:onclick="{deleteUserGroup(uid,g.gid,"group")}">Delete</a></td>
           </tr>
         }
@@ -808,7 +1149,7 @@ fun arrangeUser(gid,name){
             <td>{intToXml(u.write)}</td>
             <td>{intToXml(u.modify)}</td>
             <td>{intToXml(u.admin)}</td>
-            <td><a href="" l:onclick="{}">Edit</a></td>
+            <td><a href="" l:onclick="{editUserGroup(u.uid,u.name,gid,name,"user")}">Edit</a></td>
             <td><a href="" l:onclick="{deleteUserGroup(u.uid,gid,"user")}">Delete</a></td>
           </tr>
         }
@@ -870,13 +1211,13 @@ fun arrangeUser(gid,name){
   ,getNodeById("group_ad"))
 }
 
-sig editUserGroup : (Int,String,Int,String)~>()
-fun editUserGroup(uid,username,gid,gname){
+sig editUserGroup : (Int,String,Int,String,String)~>()
+fun editUserGroup(uid,username,gid,gname,msg){
   var gid_s = intToString(gid);
   replaceNode(
   <div class="col-sm-offset-4 col-sm-4" id="changeBox">
     <h4 class="center">Update {stringToXml(username)} permission</h4>
-    <form  method="post" l:onsubmit="{updateUserP(uid,gid,stringToInt(read),stringToInt(write),stringToInt(modify),stringToInt(admin))}">
+    <form  method="post" l:onsubmit="{updateUserP(uid,gid,stringToInt(read),stringToInt(write),stringToInt(modify),stringToInt(admin),msg)}">
       <div class="form-group">
         <label for="Group">Group Name: {stringToXml(gname)}</label>
       </div>
@@ -999,8 +1340,6 @@ fun newGroupDiv(){
 
 fun main () {
   addRoute("",mainPage);
-  #addRoute("",loginPage);
-  #addRoute("calendar",calendarPage);
   addStaticRoute("css", "css", []);
   servePages()
 }

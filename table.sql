@@ -44,14 +44,22 @@ CREATE TABLE events(
   eid serial NOT NULL,
   subject varchar(32) NOT NULL,
   description varchar(255) NOT NULL,
+  creater int NOT NULL,
+  group_event smallint DEFAULT '0',
+  gid int NOT NULL DEFAULT '0',
+  PRIMARY KEY (eid),
+  UNIQUE (subject,gid)
+);
+
+DROP TABLE IF EXISTS occurrences;
+CREATE TABLE occurrences(
+  oid serial NOT NULL,
+  eid int NOT NULL,
   start_date date NOT NULL,
   start_time time NOT NULL,
   end_date date NOT NULL,
   end_time time NOT NULL,
-  creater int NOT NULL,
-  group_event smallint DEFAULT '0',
-  gid int NOT NULL DEFAULT '0',
-  PRIMARY KEY (eid)
+  PRIMARY KEY (oid)
 );
 
 
