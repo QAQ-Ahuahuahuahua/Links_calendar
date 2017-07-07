@@ -470,7 +470,7 @@ fun updateEvent (eid,desc){
   eachEvent(eid)
 }
 
-fun updateEvent_S (eid,desc){
+fun updateEvent_S (eid,desc) server{
   update (e<--events) where (e.eid==eid) set (description=desc)
 }
 ############################################
@@ -734,7 +734,7 @@ fun eachEvent(eid){
       {
         if(r.gid==0){
           <#>
-          <button type="button" class="btn btn-default" l:onclick="{editEvent(eid,e.description)}">Modify</button>
+          <button type="button" class="btn btn-default" l:onclick="{editEvent(eid)}">Modify</button>
           <button type="button" class="btn btn-default" l:onclick="{deleteEvent(eid)}">Delete</button>
           <button type="button" class="btn btn-default" l:onclick="{newOccur(eid)}">Add Occurrences</button>
           </#>
@@ -744,7 +744,7 @@ fun eachEvent(eid){
       }
       {
         if(r.gid<>0 && (r.modify ==1 || r.admin==1))
-          <button type="button" class="btn btn-default" l:onclick="{editEvent(eid,e.description)}">Modify</button>
+          <button type="button" class="btn btn-default" l:onclick="{editEvent(eid)}">Modify</button>
         else
           <#></#>
       }
@@ -765,20 +765,22 @@ fun eachEvent(eid){
   ,getNodeById("content"))
 }
 
-fun editEvent(eid,description){
+fun editEvent(eid){
   replaceNode(
   <form  method="post" l:onsubmit="{updateEvent(eid,desc)}">
-    <div class="form-group">
+    <div class="row">
       <div class="col-sm-2">
         <h4>Description</h4>
       </div>
-      <div class="col-sm-10">
-        <textarea class="form-control" rows="5" cols="10" value="{description}" l:name="desc"></textarea>
+      <div class="col-sm-6">
+        <textarea class="form-control" rows="5" l:name="desc"></textarea>
       </div>
     </div>
-    <div class="pull-right btn-group">
-      <button type="submit">Submit</button>
-      <button type="button" l:onclick="{eachEvent(eid)}">Cancle</button>
+    <div class="row">
+      <div class="pull-right btn-group col-sm-8">
+        <button type="submit" class="btn btn-success">Submit</button>
+        <button type="button" class="btn btn-warning" l:onclick="{eachEvent(eid)}">Cancle</button>
+      </div>
     </div>
   </form>
   ,getNodeById("desc"))
