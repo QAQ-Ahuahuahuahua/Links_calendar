@@ -365,22 +365,22 @@ sig addEvent : (String,String,String,String,String,String,String)~>()
 fun addEvent(subject,description,startdate,starttime,enddate,endtime,gid) {
   var user = getCookie("loginname");
   var uid = getUserByUsername(user).uid;
-  addEvent_S(subject,description,startdate,starttime,enddate,endtime,gid,uid);
-  dayPage()
+  var l = addEvent_S(subject,description,startdate,starttime,enddate,endtime,gid,uid);
+  dayPage(clientTime())
 }
 
 sig addEvent_S : (String,String,String,String,String,String,String,Int)~>()
 fun addEvent_S(subject,description,startdate,starttime,enddate,endtime,gid,uid) server{
-  if(gid<>""){
-    var gid_s = stringToInt(gid);
-    insert events values [(subject=subject,description=description,creater=uid,group_event=1,gid=gid_s)];
-    var eid = getEidByName(subject,gid_s).eid;
+  var gid_i = stringToInt(gid);
+  if(gid_i<>0){
+    insert events values [(subject=subject,description=description,creater=uid,group_event=1,gid=gid_i)];
+    var eid = getEidByName(subject,gid_i).eid;
     insert occurrences values [(eid=eid, start_date=startdate,start_time=starttime,end_date=enddate,end_time=endtime )]
   }
   else{
     insert events values [(subject=subject,description=description, creater=uid,group_event=0,gid=0)];
     var eid = getEidByName(subject,0).eid;
-    insert occurrences values [(eid=eid, start_date=startdate,start_time=starttime,end_date=enddate,end_time=endtime )]
+    insert occurrences values [(eid=eid, start_date=startdate,start_time=starttime,end_date=enddate,end_time=endtime)]
   }
 }
 
@@ -426,7 +426,7 @@ fun getOccurByEid(eid) server {
 
 fun deleteEvent(eid){
   deleteEvent_S(eid);
-  dayPage()
+  dayPage(serverTime())
 }
 
 fun deleteEvent_S(eid) server{
@@ -616,7 +616,7 @@ fun calendarPage(user,date) {
                 }
               }
               <li><a href="" l:onclick="{groupPage()}">Group Admin</a></li>
-              <li><a href="" l:onclick="{dayPage()}">Day</a></li>
+              <li><a href="" l:onclick="{dayPage(date)}">Day</a></li>
             </ul>
             <form class="navbar-form navbar-left" role="search" method="post">
               <div class="form-group">
@@ -649,7 +649,7 @@ fun calendarPart(date){
   var lmDays = intToDate(lastMonthDay).day;
   var lastMonth = dateToInt((day=d,hours=0,minutes=0,month=m-1,seconds=0,year=y));
   var nextMonth = dateToInt((day=d,hours=0,minutes=0,month=m+1,seconds=0,year=y));
-  var rows = (days+startWeek)/7+1;
+  var rows = floatToInt(ceiling((intToFloat(days)+.intToFloat(startWeek))/.7.0));
   <div id="content" class="container">
     <div class="panel panel-default">
       <div class="panel-heading">
@@ -658,12 +658,21 @@ fun calendarPart(date){
       <div class="panel-body">
         <div class="row">
           <div class="btn-group col-sm-offset-5">
-            <button type="submit" class="btn-primary btn" l:onclick="{updateC(lastMonth)}" >Prev</button>
-            <button type="button" class="btn-primary btn">Today</button>
-            <button type="submit" class="btn-primary btn" l:onclick="{updateC(nextMonth)}">Next</button>
+            <button type="button" class="btn-info btn" l:onclick="{updateC(lastMonth)}" >Prev</button>
+            <button type="button" class="btn-info btn" l:onclick="{updateC(date)}">{intToXml(y)} - {intToXml(m+1)}</button>
+            <button type="button" class="btn-info btn" l:onclick="{updateC(nextMonth)}">Next</button>
           </div>
         </div>
         <table class="table table-striped">
+          <colgroup>
+            <col width="14%"/>
+            <col width="14%"/>
+            <col width="14%"/>
+            <col width="14%"/>
+            <col width="14%"/>
+            <col width="14%"/>
+            <col width="14%"/>
+          </colgroup>
           <thead>
             <tr>
               <th>Sun</th>
@@ -685,26 +694,68 @@ fun calendarPart(date){
                   var end = (r*7-startWeek);
                   for(p<-[start..end]){
                     if(p<=days && p>0){
+                      var time = intToString(y) ^^ "-" ^^ intToString(m+1) ^^ "-" ^^ intToString(p);
+                      var events = showDayEvents(time);
                       if(p==d)
                       <td>
-                        <p class="text-danger">
-                          <strong>{intToXml(p)}</strong>
-                        </p>
+                        <div class="panel panel-danger">
+                          <div class="panel-heading">
+                            <h4 class="panel-title"><strong>{intToXml(p)}</strong></h4>
+                          </div>
+                          {
+                            for(e<-events)
+                            <a href="" class="list-group-item" l:onclick="{eachEvent(e.eid)}"><small>{stringToXml(e.subject)}</small></a>
+                          }
+                        </div>
                       </td>
                       else
                       <td>
-                        <p>{intToXml(p)}</p>
+                        <div class="panel panel-info">
+                          <div class="panel-heading">
+                            <h4 class="panel-title">{intToXml(p)}</h4>
+                          </div>
+                          {
+                            for(e<-events)
+                            <a href="" class="list-group-item" l:onclick="{eachEvent(e.eid)}"><small>{stringToXml(e.subject)}</small></a>
+                          }
+                        </div>
                       </td>
                     }
                     else{
-                      if(p<=0)
+                      if(p<=0){
+                        var time = intToString(y) ^^ "-" ^^ intToString(m) ^^ "-" ^^ intToString(p+lmDays);
+                        var events = showDayEvents(time);
                         <td>
-                          <p class="text-muted">{intToXml(p+lmDays)}</p>
+                          <div class="panel panel-default">
+                            <div class="panel-heading">
+                              <h4 class="panel-title">{intToXml(p+lmDays)}</h4>
+                            </div>
+                            {
+                              for(e<-events)
+                              <a href="" class="list-group-item" l:onclick="{eachEvent(e.eid)}">
+                                <small><p class="text-muted">{stringToXml(e.subject)}</p></small>
+                              </a>
+                            }
+                          </div>
                         </td>
-                      else
+                      }
+                      else{
+                        var time = intToString(y) ^^ "-" ^^ intToString(m+2) ^^ "-" ^^ intToString(p-days);
+                        var events = showDayEvents(time);
                         <td>
-                          <p class="text-muted">{intToXml((p-days))}</p>
+                          <div class="panel panel-default">
+                            <div class="panel-heading">
+                              <h4 class="panel-title">{intToXml(p-days)}</h4>
+                            </div>
+                            {
+                              for(e<-events)
+                              <a href="" class="list-group-item" l:onclick="{eachEvent(e.eid)}">
+                                <small><p class="text-muted">{stringToXml(e.subject)}</p></small>
+                              </a>
+                            }
+                          </div>
                         </td>
+                      }
                     }
                   }
                 }
@@ -725,21 +776,28 @@ fun updateC(date){
   replaceNode(calendarPart(date),getNodeById("content"))
 }
 
-sig dayPage :()~>()
-fun dayPage(){
+sig dayPage :(Int)~>()
+fun dayPage(date){
+  var t = intToDate(date);
+  var m = t.month;
+  var y = t.year;
+  var d = t.day;
+  var today = intToString(y) ^^ "-" ^^ intToString(m+1) ^^ "-" ^^ intToString(d);
+  var lastDay = dateToInt((day=d-1,hours=0,minutes=0,month=m,seconds=0,year=y));
+  var nextDay = dateToInt((day=d+1,hours=0,minutes=0,month=m,seconds=0,year=y));
   replaceNode(
   <div class="container" id="content">
     <div class="list-group">
       <a href="" class="list-group-item">
         <div class="btn-group col-sm-offset-5">
-          <button type="button" class="btn-primary btn">Prev</button>
-          <button type="button" class="btn-primary btn">Today</button>
-          <button type="button" class="btn-primary btn">Next</button>
+          <button type="button" class="btn-primary btn" l:onclick="{dayPage(lastDay)}">Prev</button>
+          <button type="button" class="btn-primary btn">Today {intToXml(y)} - {intToXml(m+1)} - {intToXml(d)}</button>
+          <button type="button" class="btn-primary btn" l:onclick="{dayPage(nextDay)}">Next</button>
         </div>
       </a>
       {
-        for(e<-showDayEvents("2017-07-05"))
-        <a href="" class="list-group-item">
+        for(e<-showDayEvents(today))
+        <a href="" class="list-group-item" l:onclick="{eachEvent(e.eid)}">
           <div class="row">
             <div class="col-sm-8">
               <h4 class="list-group-item-heading">{stringToXml(e.subject)}</h4>
@@ -1052,7 +1110,7 @@ fun eventPage(){
             <label for="Groupname" class="col-sm-2 control-label ">Group Name</label>
             <div class="col-sm-3 col-sm-offset-1">
               <select class="form-control" l:name="gid" >
-                <option value="">None</option>
+                <option value="0">None</option>
                 {
                   for(g<-showEventGroup())
                   <option value="{intToString(g.gid)}">{stringToXml(g.name)}</option>
