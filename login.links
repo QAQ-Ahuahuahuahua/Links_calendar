@@ -366,7 +366,7 @@ fun addEvent(subject,description,startdate,starttime,enddate,endtime,gid) {
   var user = getCookie("loginname");
   var uid = getUserByUsername(user).uid;
   var l = addEvent_S(subject,description,startdate,starttime,enddate,endtime,gid,uid);
-  dayPage(clientTime())
+  dayPage(clientTime()/1000)
 }
 
 sig addEvent_S : (String,String,String,String,String,String,String,Int)~>()
@@ -426,7 +426,7 @@ fun getOccurByEid(eid) server {
 
 fun deleteEvent(eid){
   deleteEvent_S(eid);
-  dayPage(serverTime())
+  dayPage(clientTime()/1000)
 }
 
 fun deleteEvent_S(eid) server{
@@ -616,7 +616,7 @@ fun calendarPage(user,date) {
                 }
               }
               <li><a href="" l:onclick="{groupPage()}">Group Admin</a></li>
-              <li><a href="" l:onclick="{dayPage(date)}">Day</a></li>
+              <li><a href="" l:onclick="{dayPage(clientTime()/1000)}">Day</a></li>
             </ul>
             <form class="navbar-form navbar-left" role="search" method="post">
               <div class="form-group">
