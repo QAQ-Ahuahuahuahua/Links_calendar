@@ -1,2 +1,9 @@
-var db = database “calendar”;
-var users = table “users” with (uid : Int, name : String) from db;
+# Links select operation
+for (u<--users)
+where ( u.uid<10)
+[(uid = u.uid, name = u.name)]
+
+# SQL select operation
+select uid, name
+from users
+where uid<10
