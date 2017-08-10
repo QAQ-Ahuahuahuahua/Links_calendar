@@ -1,9 +1,16 @@
-# Links select operation
-for (u<--users)
-where ( u.uid<10)
-[(uid = u.uid, name = u.name)]
+fun changeDiv(){
+  replaceNode(
+  <div id=”add”>
+    <form><input type=text /></form>
+  </div>, getNodeById(“add”))
+}
 
-# SQL select operation
-select uid, name
-from users
-where uid<10
+fun mainPage(){
+  page
+  <html>
+  <body>
+    <div id=”add”><button l:onclick=”{changeDiv()}”>button</button></div>
+  </body>
+  </html>
+}
+
