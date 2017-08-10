@@ -1,8 +1,16 @@
-{
-    if((r.gid<>0 && (r.modify ==1 || r.admin==1))||e.gid==0)
-        <a href="" l:onclick="{editOccur(o.oid,eid,o.start_d,o.start_t,o.end_d,o.end_t)}">
-            <strong>Edit</strong>
-        </a>
-    else
-        <#></#>
+fun handleForm(p) {
+	do something
 }
+fun mainPage (_) {
+  page
+    <html>
+    <body>
+      <h1>Example form</h1>
+      <form l:action="{handleForm(i)}">
+		<input type="checkbox" l:name="i" /> Test
+        <button type="submit">Submit!</button>
+      </form>
+      </body>
+    </html>
+}
+
