@@ -2,9 +2,7 @@ fun testPage(msg){
   page
   <html>
     <body>
-      <div id="p">
-        <p>LALA</p>
-      </div>
+      <div id="p"><p>LALA</p></div>
       <a href="" l:onclick="{changeContent()}">Click me</a>
     </body>
   </html>
@@ -15,7 +13,5 @@ fun changeContent(){
       <form l:action="{testPage(i)}" method="post">
         <input type="text" l:name="i" value="" />
       </form>
-    </div>,
-    getNodeById("p")
-  )
+    </div>,getNodeById("p"))
 }
