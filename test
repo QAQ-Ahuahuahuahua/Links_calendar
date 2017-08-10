@@ -1,6 +1,5 @@
 query{
-	for(x<--users)
-	for(y<--user_group)
-	where(x.uid==y.uid && y.gid==gid)
-	[(c=x.c,d=x.c)]
+    for(u<--users)
+    where(empty(for(ug<--user_group) where (ug.uid==u.uid && gid==ug.gid) [()]))
+    [(uid=u.uid, name=u.username)]
 }
