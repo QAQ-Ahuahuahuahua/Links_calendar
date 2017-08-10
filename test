@@ -1,16 +1,10 @@
-fun changeDiv(){
-  replaceNode(
-  <div id=”add”>
-    <form><input type=text /></form>
-  </div>, getNodeById(“add”))
+fun dateFormlet() {
+  formlet <#>
+    Day:   {inputInt -> day}
+    Month: {inputInt -> month}
+    Year:  {inputInt -> year}
+  </#>
+  yields {
+    Date(day, month, year)
+  }
 }
-
-fun mainPage(){
-  page
-  <html>
-  <body>
-    <div id=”add”><button l:onclick=”{changeDiv()}”>button</button></div>
-  </body>
-  </html>
-}
-
