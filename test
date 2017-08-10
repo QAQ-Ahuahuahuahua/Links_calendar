@@ -1,6 +1,9 @@
-fun mainPage(){
-  page
-  <html>
-  …
-  </html>
+{
+  if(isAdmin(user)){
+    <li><a href="" l:onclick="{adminPage()}">User Admin</a></li>
+  }
+  else{
+    <#></#>
+  }
 }
+
