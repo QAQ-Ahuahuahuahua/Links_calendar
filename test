@@ -1,10 +1,6 @@
-fun dateFormlet() {
-  formlet <#>
-    Day:   {inputInt -> day}
-    Month: {inputInt -> month}
-    Year:  {inputInt -> year}
-  </#>
-  yields {
-    Date(day, month, year)
-  }
+fun mainPage(){
+  page
+  <html>
+  …
+  </html>
 }
