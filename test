@@ -1,16 +1,21 @@
-fun handleForm(p) {
-	do something
-}
-fun mainPage (_) {
+fun testPage(msg){
   page
-    <html>
+  <html>
     <body>
-      <h1>Example form</h1>
-      <form l:action="{handleForm(i)}">
-		<input type="checkbox" l:name="i" /> Test
-        <button type="submit">Submit!</button>
-      </form>
-      </body>
-    </html>
+      <div id="p">
+        <p>LALA</p>
+      </div>
+      <a href="" l:onclick="{changeContent()}">Click me</a>
+    </body>
+  </html>
 }
-
+fun changeContent(){
+  replaceNode(
+    <div id="p">
+      <form l:action="{testPage(i)}" method="post">
+        <input type="text" l:name="i" value="" />
+      </form>
+    </div>,
+    getNodeById("p")
+  )
+}
