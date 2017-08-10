@@ -1,25 +1,6 @@
-#HTML Page
-fun userPage(){
-  page
-  <html>
-  <body>
-    <form method=”post” l:onsubmit=”{addUser(name,pwd)}”>
-	    <input type=”text” l:name=”name”/>
-      <input type=”text” l:name=”pwd”/>
-	    <button type=”submit”>Submit</button>
-    </form>
-	</body>
-  </html>
+query{
+	for(x<--users)
+	for(y<--user_group)
+	where(x.uid==y.uid && y.gid==gid)
+	[(c=x.c,d=x.c)]
 }
-
-#response to submit
-fun addUser(name, pwd){
-	insertUser(name,pwd);
-	otherPage()
-}
-
-#logic part about inserting a user into database
-fun insertUser(name,pwd) server {
-	insert users values [(username=username,password=pwd)]
-}
-
