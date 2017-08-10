@@ -1,0 +1,2 @@
+var db = database “calendar”;
+var users = table “users” with (uid : Int, name : String) from db;
