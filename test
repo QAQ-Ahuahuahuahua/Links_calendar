@@ -1,9 +1,25 @@
-{
-  if(isAdmin(user)){
-    <li><a href="" l:onclick="{adminPage()}">User Admin</a></li>
-  }
-  else{
-    <#></#>
-  }
+#HTML Page
+fun userPage(){
+  page
+  <html>
+  <body>
+    <form method=”post” l:onsubmit=”{addUser(name,pwd)}”>
+	    <input type=”text” l:name=”name”/>
+      <input type=”text” l:name=”pwd”/>
+	    <button type=”submit”>Submit</button>
+    </form>
+	</body>
+  </html>
+}
+
+#response to submit
+fun addUser(name, pwd){
+	insertUser(name,pwd);
+	otherPage()
+}
+
+#logic part about inserting a user into database
+fun insertUser(name,pwd) server {
+	insert users values [(username=username,password=pwd)]
 }
 
