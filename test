@@ -1,17 +1,17 @@
-fun testPage(msg){
-  page
+fun main() {
+ var user = get_user(noMsg);
+ page
   <html>
     <body>
-      <div id="p"><p>LALA</p></div>
-      <a href="" l:onclick="{changeContent()}">Click me</a>
+      <div>Welcome, {stringToXml(user)}.</div>
+      <ul><li><a href="" l:onclick="{addContent()}">Add Event</a></li>
+          <li>{logoutLink(main)}</li>
+      </ul>
+      <div id="content">Intitial content here that should be replaced</div>
     </body>
   </html>
 }
-fun changeContent(){
-  replaceNode(
-    <div id="p">
-      <form l:action="{testPage(i)}" method="post">
-        <input type="text" l:name="i" value="" />
-      </form>
-    </div>,getNodeById("p"))
+
+fun addContent() {
+  replaceNode(<h3>Added content should appear here</h3>,getNodeById("content"))
 }
