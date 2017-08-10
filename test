@@ -1,5 +1,8 @@
-query{
-    for(u<--users)
-    where(empty(for(ug<--user_group) where (ug.uid==u.uid && gid==ug.gid) [()]))
-    [(uid=u.uid, name=u.username)]
+{
+    if((r.gid<>0 && (r.modify ==1 || r.admin==1))||e.gid==0)
+        <a href="" l:onclick="{editOccur(o.oid,eid,o.start_d,o.start_t,o.end_d,o.end_t)}">
+            <strong>Edit</strong>
+        </a>
+    else
+        <#></#>
 }
