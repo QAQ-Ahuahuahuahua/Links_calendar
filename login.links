@@ -178,11 +178,9 @@ fun showUsers() server{
 #sig deleteUser : (Int)~>()
 fun deleteUser(uid){
   var current_u = getCookie("loginname");
-  var user = getUserById(uid).username;
+  var c_uid = getUserByUsername(current_u).uid;
   deleteUser_S(uid);
-  if(current_u<>user)
-    adminPage()
-  else
+  if(c_uid==uid){
     setCookie("loginname", "");
     replaceDocument(
     <html>
@@ -196,6 +194,10 @@ fun deleteUser(uid){
         <h2>You have deleted yourself</h2>
       </body>
     </html>)
+  }else{
+    adminPage()
+  }
+  
 }
 
 sig deleteUser_S : (Int)~>()
